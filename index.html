@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="/Logo.png" type="image/png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PRAGVA HRMS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  </head>
+  <body>
+
+    <script>
+      (function() {
+        function createMemoryStorage() {
+          var memory = {};
+          return {
+            getItem: function(k) { return memory[k] || null; },
+            setItem: function(k, v) { memory[k] = String(v); },
+            removeItem: function(k) { delete memory[k]; },
+            clear: function() { memory = {}; },
+            key: function(i) { return Object.keys(memory)[i] || null; },
+            get length() { return Object.keys(memory).length; }
+          };
+        }
+        try {
+          window.sessionStorage.setItem('__test__', '1');
+          window.sessionStorage.removeItem('__test__');
+          window.safeSessionStorage = window.sessionStorage;
+        } catch(e) {
+          window.safeSessionStorage = createMemoryStorage();
+        }
+        try {
+          window.localStorage.setItem('__test__', '1');
+          window.localStorage.removeItem('__test__');
+          window.safeLocalStorage = window.localStorage;
+        } catch(e) {
+          window.safeLocalStorage = createMemoryStorage();
+        }
+
+        // Global Error Boundary with Console Tracing
+        window._debugLogs = [];
+        var originalLog = console.log, originalWarn = console.warn, originalError = console.error;
+        function logMsg(type, args) {
+          try {
+            var msg = Array.from(args).map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+            window._debugLogs.push('[' + type + '] ' + msg);
+            if (window._debugLogs.length > 20) window._debugLogs.shift();
+          } catch(e) {}
+        }
+        console.log = function() { logMsg('LOG', arguments); originalLog.apply(console, arguments); };
+        console.warn = function() { logMsg('WARN', arguments); originalWarn.apply(console, arguments); };
+        console.error = function() { logMsg('ERR', arguments); originalError.apply(console, arguments); };
+
+        window.onerror = function(message, source, lineno, colno, error) {
+          var errorDiv = document.createElement('div');
+          errorDiv.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:white;color:red;z-index:999999;padding:20px;font-family:monospace;font-size:12px;overflow:auto;word-wrap:break-word;';
+          errorDiv.innerHTML = '<h3>Fatal Startup Error</h3>' +
+            '<p><strong>Message:</strong> ' + message + '</p>' +
+            '<p><strong>Source:</strong> ' + source + ':' + lineno + ':' + colno + '</p>' +
+            '<p><strong>Recent Logs:</strong><br/>' + window._debugLogs.join('<br/>') + '</p>' +
+            '<p><strong>Stack:</strong><br/>' + (error && error.stack ? error.stack.replace(/\n/g, '<br/>') : 'No stack') + '</p>';
+          document.body.appendChild(errorDiv);
+        };
+
+        window.onunhandledrejection = function(event) {
+          var errorDiv = document.createElement('div');
+          errorDiv.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:white;color:red;z-index:999999;padding:20px;font-family:monospace;font-size:12px;overflow:auto;word-wrap:break-word;';
+          errorDiv.innerHTML = '<h3>Unhandled Promise Rejection</h3>' +
+            '<p><strong>Reason:</strong> ' + (event.reason ? event.reason.toString() : 'Unknown') + '</p>' +
+            '<p><strong>Recent Logs:</strong><br/>' + window._debugLogs.join('<br/>') + '</p>';
+          document.body.appendChild(errorDiv);
+        };
+      })();
+    </script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

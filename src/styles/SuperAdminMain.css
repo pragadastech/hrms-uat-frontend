@@ -1,0 +1,520 @@
+/* ═══════════════════════════════════════════════════════════
+   Super Admin Portal — unified modern design system
+   Uses app theme tokens; works in light & dark mode
+   ═══════════════════════════════════════════════════════════ */
+
+.sa-portal-page {
+  --sa-radius: 14px;
+  --sa-radius-sm: 10px;
+  --sa-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
+  --sa-shadow-hover: 0 4px 12px rgba(15, 23, 42, 0.08), 0 16px 40px rgba(99, 102, 241, 0.12);
+  --sa-gradient: linear-gradient(135deg, var(--primary-500, #6366f1) 0%, #8b5cf6 100%);
+  --sa-surface: var(--white-5);
+  --sa-border: var(--gray-10);
+
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 90% 60% at 50% -10%, rgba(99, 102, 241, 0.08), transparent 55%),
+    radial-gradient(ellipse 50% 40% at 100% 0%, rgba(139, 92, 246, 0.05), transparent 50%),
+    var(--gray-5, #f1f5f9);
+}
+
+[data-theme='dark'] .sa-portal-page {
+  background:
+    radial-gradient(ellipse 90% 60% at 50% -10%, rgba(99, 102, 241, 0.12), transparent 55%),
+    var(--gray-5, #0f172a);
+}
+
+.sa-portal-main {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 16px 20px 28px !important;
+  max-width: 1520px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* ── Stats row ───────────────────────────────────────────── */
+.sa-stats-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+@media (min-width: 768px) {
+  .sa-stats-row {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.sa-stats-row--3 {
+  grid-template-columns: repeat(1, 1fr);
+}
+
+@media (min-width: 640px) {
+  .sa-stats-row--3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.sa-stat-tile {
+  position: relative;
+  background: var(--sa-surface);
+  border: 1px solid var(--sa-border);
+  border-radius: var(--sa-radius);
+  padding: 16px 18px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  min-height: 88px;
+  box-shadow: var(--sa-shadow);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  overflow: hidden;
+}
+
+.sa-stat-tile::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--sa-gradient);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.sa-stat-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--sa-shadow-hover);
+  border-color: var(--primary-200, rgba(99, 102, 241, 0.35));
+}
+
+.sa-stat-tile:hover::before {
+  opacity: 1;
+}
+
+.sa-stat-tile__icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--primary-10);
+  color: var(--primary-600);
+}
+
+.sa-stat-tile--emerald .sa-stat-tile__icon {
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+}
+
+.sa-stat-tile--amber .sa-stat-tile__icon {
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+}
+
+.sa-stat-tile--violet .sa-stat-tile__icon {
+  background: rgba(139, 92, 246, 0.12);
+  color: #7c3aed;
+}
+
+.sa-stat-tile--rose .sa-stat-tile__icon {
+  background: rgba(244, 63, 94, 0.1);
+  color: #e11d48;
+}
+
+.sa-stat-tile__value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--dark-500);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+.sa-stat-tile__label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gray-500);
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sa-stat-tile__meta {
+  font-size: 11px;
+  color: var(--gray-400, #94a3b8);
+  margin-top: 6px;
+  font-weight: 500;
+}
+
+/* ── Panels ──────────────────────────────────────────────── */
+.sa-panel-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+@media (min-width: 1024px) {
+  .sa-panel-grid--dashboard {
+    grid-template-columns: 1.35fr 1fr;
+  }
+
+  .sa-panel-grid--full {
+    grid-column: 1 / -1;
+  }
+}
+
+.sa-panel {
+  background: var(--sa-surface);
+  border: 1px solid var(--sa-border);
+  border-radius: var(--sa-radius);
+  overflow: hidden;
+  box-shadow: var(--sa-shadow);
+  transition: box-shadow 0.2s ease;
+}
+
+.sa-panel:hover {
+  box-shadow: var(--sa-shadow-hover);
+}
+
+.sa-panel__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--sa-border);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dark-500);
+  letter-spacing: -0.01em;
+  background: linear-gradient(180deg, var(--white-10, rgba(255,255,255,0.5)) 0%, transparent 100%);
+}
+
+.sa-panel__head-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sa-panel__head-icon--primary {
+  background: var(--primary-10);
+  color: var(--primary-600);
+}
+
+.sa-panel__head-icon--success {
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+}
+
+.sa-panel__head-icon--warning {
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+}
+
+.sa-panel__body {
+  padding: 16px 18px;
+}
+
+.sa-panel__body--flush {
+  padding: 0;
+}
+
+/* ── Toolbar ─────────────────────────────────────────────── */
+.sa-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  background: var(--sa-surface);
+  border: 1px solid var(--sa-border);
+  border-radius: var(--sa-radius-sm);
+  box-shadow: var(--sa-shadow);
+}
+
+.sa-search-field {
+  position: relative;
+  flex: 1;
+  min-width: 200px;
+  max-width: 400px;
+}
+
+.sa-portal-page .filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--sa-border);
+  background: var(--sa-surface);
+  color: var(--dark-500);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sa-portal-page .filter-btn:hover:not(:disabled) {
+  border-color: var(--primary-300);
+  color: var(--primary-600);
+  background: var(--primary-5, rgba(99, 102, 241, 0.05));
+}
+
+.sa-portal-page .filter-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sa-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  color: #fff;
+  background: var(--sa-gradient);
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sa-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45);
+}
+
+.sa-toolbar-meta {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gray-500);
+}
+
+/* ── Badges ──────────────────────────────────────────────── */
+.sa-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.sa-badge--success {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.sa-badge--muted {
+  background: var(--gray-10);
+  color: var(--gray-500);
+}
+
+.sa-badge--warning {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.sa-badge--primary {
+  background: var(--primary-10);
+  color: var(--primary-700, #4338ca);
+}
+
+[data-theme='dark'] .sa-badge--success {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
+/* ── Data tables (inside sa-panel) ───────────────────────── */
+.sa-portal-page .employee-table-container,
+.sa-portal-page .tenant-table-wrapper {
+  border-radius: 0;
+  overflow-x: auto;
+}
+
+.sa-portal-page .employee-table thead th,
+.sa-portal-page .tenant-table-premium th {
+  background: var(--white-10, #f8fafc);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gray-500);
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--sa-border);
+}
+
+.sa-portal-page .employee-table tbody td,
+.sa-portal-page .tenant-table-premium td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--gray-10);
+  font-size: 13px;
+  vertical-align: middle;
+}
+
+.sa-portal-page .employee-table tbody tr:hover,
+.sa-portal-page .tenant-table-premium tbody tr:hover {
+  background: var(--primary-5, rgba(99, 102, 241, 0.03));
+}
+
+.sa-portal-page .tenant-table-wrapper {
+  background: var(--sa-surface);
+  border: 1px solid var(--sa-border);
+  border-radius: var(--sa-radius);
+  box-shadow: var(--sa-shadow);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+/* ── Loading / error / empty ─────────────────────────────── */
+.sa-portal-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 320px;
+  color: var(--gray-500);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.sa-portal-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--gray-10);
+  border-top-color: var(--primary-500);
+  border-radius: 50%;
+  animation: sa-portal-spin 0.7s linear infinite;
+}
+
+@keyframes sa-portal-spin {
+  to { transform: rotate(360deg); }
+}
+
+.sa-portal-error {
+  text-align: center;
+  padding: 2.5rem !important;
+  border-radius: var(--sa-radius);
+  border: 1px solid var(--sa-border);
+  box-shadow: var(--sa-shadow);
+}
+
+.sa-portal-error p {
+  color: var(--error, #dc2626);
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.sa-empty-hint {
+  text-align: center;
+  padding: 2.5rem 1rem;
+  color: var(--gray-500);
+  font-size: 13px;
+}
+
+.sa-table-busy {
+  opacity: 0.5;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+/* ── Sidebar: platform owner header ──────────────────────── */
+.sa-sidebar-platform {
+  padding: 14px 12px 10px;
+  border-bottom: 1px solid var(--gray-10);
+}
+
+.sa-sidebar-platform-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+}
+
+.sa-sidebar-platform-brand.collapsed {
+  justify-content: center;
+}
+
+.sa-sidebar-platform-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.sa-sidebar-platform-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sa-sidebar-platform-name {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--dark-500);
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+}
+
+.sa-sidebar-platform-tag {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--primary-600);
+  margin-top: 2px;
+}
+
+/* Active nav accent for super admin */
+.sidebar-premium.sa-sidebar--platform .nav-item.active {
+  background: linear-gradient(90deg, var(--primary-10) 0%, transparent 100%);
+  border-left: 3px solid var(--primary-500);
+}
+
+/* ── Page-specific overrides ─────────────────────────────── */
+.sa-portal-page.dashboard-page,
+.sa-portal-page.tenants-page,
+.sa-portal-page.plans-page,
+.sa-portal-page.billing-page {
+  min-height: auto;
+}
+
+.sa-portal-page .dashboard-container,
+.sa-portal-page .tenants-container,
+.sa-portal-page .plans-container {
+  padding: 0;
+  max-width: none;
+}
+
+[data-theme='dark'] .sa-stat-tile,
+[data-theme='dark'] .sa-panel,
+[data-theme='dark'] .sa-toolbar,
+[data-theme='dark'] .sa-portal-page .tenant-table-wrapper {
+  background: var(--white-5);
+  border-color: var(--gray-20);
+}
+
+[data-theme='dark'] .sa-panel__head {
+  background: rgba(255, 255, 255, 0.02);
+}

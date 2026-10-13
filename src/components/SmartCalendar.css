@@ -1,0 +1,277 @@
+/* SmartCalendar.css */
+.react-calendar {
+    width: 100%;
+    max-width: 100%;
+    background: var(--white-100, white);
+    border: 1px solid var(--gray-200, #e2e8f0);
+    font-family: inherit;
+    line-height: 1.125em;
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.dark-mode .react-calendar {
+    background: var(--dark-800, #1f2937);
+    border-color: var(--dark-700, #374151);
+    color: var(--gray-100, #f3f4f6);
+}
+
+.react-calendar--doubleView {
+    width: 700px;
+}
+
+.react-calendar--doubleView .react-calendar__viewContainer {
+    display: flex;
+    margin: -0.5em;
+}
+
+.react-calendar--doubleView .react-calendar__viewContainer>* {
+    width: 50%;
+    margin: 0.5em;
+}
+
+.react-calendar,
+.react-calendar *,
+.react-calendar *:before,
+.react-calendar *:after {
+    -moz-box-sizing: border-box;
+    -webkit-box-sizing: border-box;
+    box-sizing: border-box;
+}
+
+.react-calendar button {
+    margin: 0;
+    border: 0;
+    outline: none;
+}
+
+.react-calendar button:enabled:hover {
+    cursor: pointer;
+}
+
+.react-calendar__navigation {
+    display: flex;
+    height: 44px;
+    margin-bottom: 1em;
+}
+
+.react-calendar__navigation button {
+    min-width: 44px;
+    background: none;
+    font-weight: 600;
+    font-size: 16px;
+    color: var(--dark-500, #111827);
+    border-radius: 8px;
+}
+
+.dark-mode .react-calendar__navigation button {
+    color: var(--gray-100, #f3f4f6);
+}
+
+.react-calendar__navigation button:disabled {
+    background-color: #f0f0f0;
+}
+
+.react-calendar__navigation button:enabled:hover,
+.react-calendar__navigation button:enabled:focus {
+    background-color: var(--gray-100, #f3f4f6);
+}
+
+.dark-mode .react-calendar__navigation button:enabled:hover,
+.dark-mode .react-calendar__navigation button:enabled:focus {
+    background-color: var(--dark-700, #374151);
+}
+
+.react-calendar__month-view__weekdays {
+    text-align: center;
+    text-transform: uppercase;
+    font-weight: 600;
+    font-size: 0.75em;
+    color: var(--gray-500, #6b7280);
+    padding-bottom: 8px;
+}
+
+.react-calendar__month-view__weekdays__weekday {
+    padding: 0.5em;
+}
+
+.react-calendar__month-view__weekNumbers .react-calendar__tile {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75em;
+    font-weight: bold;
+}
+
+/* Day Tiles */
+.react-calendar__tile {
+    max-width: 100%;
+    padding: 10px 6.6667px;
+    background: none;
+    text-align: center;
+    line-height: 16px;
+    font-size: 14px;
+    border-radius: 8px;
+    position: relative;
+    height: 80px;
+    /* Fixed height for consistent grid */
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+}
+
+.react-calendar__tile:enabled:hover,
+.react-calendar__tile:enabled:focus {
+    background-color: var(--gray-50, #f9fafb);
+    border-color: var(--gray-200, #e5e7eb);
+}
+
+.dark-mode .react-calendar__tile:enabled:hover,
+.dark-mode .react-calendar__tile:enabled:focus {
+    background-color: var(--dark-700, #374151);
+    border-color: var(--dark-600, #4b5563);
+}
+
+.react-calendar__tile--now {
+    background: var(--blue-50, #eff6ff);
+    color: var(--primary-600, #2563eb);
+    font-weight: bold;
+}
+
+.dark-mode .react-calendar__tile--now {
+    background: rgba(37, 99, 235, 0.2);
+    color: var(--primary-400, #60a5fa);
+}
+
+.react-calendar__tile--active {
+    background: var(--primary-600, #2563eb);
+    color: white;
+}
+
+.react-calendar__tile--active:enabled:hover,
+.react-calendar__tile--active:enabled:focus {
+    background: var(--primary-700, #1d4ed8);
+}
+
+.react-calendar__month-view__days__day--neighboringMonth {
+    color: var(--gray-300, #d1d5db);
+}
+
+.dark-mode .react-calendar__month-view__days__day--neighboringMonth {
+    color: var(--dark-600, #4b5563);
+}
+
+/* Event Markers */
+.calendar-tile-content {
+    width: 100%;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 4px;
+}
+
+.calendar-marker {
+    width: 100%;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: left;
+}
+
+.marker-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+/* Status Colors */
+.status-present {
+    background-color: #d1fae5;
+    color: #065f46;
+}
+
+.dark-mode .status-present {
+    background-color: rgba(6, 95, 70, 0.3);
+    color: #6ee7b7;
+}
+
+.status-absent {
+    background-color: #fee2e2;
+    color: #991b1b;
+}
+
+.dark-mode .status-absent {
+    background-color: rgba(153, 27, 27, 0.3);
+    color: #fca5a5;
+}
+
+.status-leave {
+    background-color: #fef3c7;
+    color: #92400e;
+}
+
+.dark-mode .status-leave {
+    background-color: rgba(146, 64, 14, 0.3);
+    color: #fcd34d;
+}
+
+.status-holiday {
+    background-color: #e0e7ff;
+    color: #3730a3;
+}
+
+.dark-mode .status-holiday {
+    background-color: rgba(55, 48, 163, 0.3);
+    color: #a5b4fc;
+}
+
+/* Specific Leave Statuses */
+.status-leave-pending {
+    background-color: #fff7ed;
+    color: #c2410c;
+    border: 1px solid transparent;
+}
+
+.dark-mode .status-leave-pending {
+    background-color: rgba(194, 65, 12, 0.2);
+    color: #fdba74;
+}
+
+.status-leave-approved {
+    background-color: #ecfccb;
+    color: #3f6212;
+    border: 1px solid transparent;
+}
+
+.dark-mode .status-leave-approved {
+    background-color: rgba(63, 98, 18, 0.2);
+    color: #bef264;
+}
+
+.status-leave-rejected {
+    background-color: #f3f4f6;
+    color: #4b5563;
+    border: 1px solid transparent;
+}
+
+.dark-mode .status-leave-rejected {
+    background-color: rgba(75, 85, 99, 0.2);
+    color: #9ca3af;
+}
+/* Custom Tile Styles */
+.weekend-tile { background-color: #f8fafc !important; }
+.dark-mode .weekend-tile { background-color: #1e293b !important; }
+.holiday-tile { background-color: #eff6ff !important; border-color: #bfdbfe !important; }
+.dark-mode .holiday-tile { background-color: rgba(37, 99, 235, 0.1) !important; border-color: rgba(37, 99, 235, 0.3) !important; }
+.disabled-tile { cursor: not-allowed !important; opacity: 0.8; }
+.weekend-tile.disabled-tile { border: 1px dashed #e2e8f0; }
+.dark-mode .weekend-tile.disabled-tile { border: 1px dashed #334155; }

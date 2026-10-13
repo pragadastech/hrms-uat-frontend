@@ -1,0 +1,227 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap');
+
+.invite-page-wrapper {
+    min-height: 100vh;
+  height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fafaf9;
+    font-family: 'DM Sans', sans-serif;
+    padding: 20px;
+}
+
+.invite-page-wrapper *,
+.invite-page-wrapper *::before,
+.invite-page-wrapper *::after {
+    box-sizing: border-box;
+}
+
+.invite-card-new {
+    width: 100%;
+    max-width: 380px;
+    background: #fff;
+    border: 1px solid #e8e6e1;
+    border-radius: 16px;
+    padding: 40px 36px;
+    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
+}
+
+.invite-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 36px;
+}
+
+.invite-brand-dot {
+    width: 9px;
+    height: 9px;
+    background: #1a1a1a;
+    border-radius: 50%;
+}
+
+.invite-brand-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1a1a1a;
+    letter-spacing: 0.02em;
+}
+
+.invite-card-new h1 {
+    font-size: 22px;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin-bottom: 6px;
+    margin-top: 0;
+}
+
+.invite-sub {
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 32px;
+}
+
+.invite-sub strong {
+    color: #555;
+    font-weight: 500;
+}
+
+.invite-field {
+    margin-bottom: 16px;
+}
+
+.invite-field label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: #999;
+    margin-bottom: 7px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.invite-input-wrap {
+    position: relative;
+}
+
+.invite-input-wrap input {
+    width: 100%;
+    background: #fafaf9;
+    border: 1px solid #e8e6e1;
+    border-radius: 10px;
+    padding: 12px 40px 12px 14px;
+    font-size: 14px;
+    font-family: inherit;
+    color: #1a1a1a;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    outline: none;
+}
+
+.invite-input-wrap input::placeholder {
+    color: #c5c3be;
+}
+
+.invite-input-wrap input:focus {
+    border-color: #1a1a1a;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.07);
+}
+
+.invite-eye-btn {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #bbb;
+    display: flex;
+    align-items: center;
+    padding: 2px;
+    transition: color 0.15s;
+}
+
+.invite-eye-btn:hover {
+    color: #555;
+}
+
+.invite-eye-btn svg {
+    width: 15px;
+    height: 15px;
+}
+
+.invite-error-box {
+    background: #fff5f5;
+    border: 1px solid #fecaca;
+    color: #dc2626;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 13px;
+    margin-bottom: 18px;
+    display: none;
+}
+
+.invite-error-box.show {
+    display: block;
+}
+
+.invite-btn {
+    width: 100%;
+    background: #1a1a1a;
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 13px;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: background 0.15s, transform 0.1s;
+}
+
+.invite-btn:hover:not(:disabled) {
+    background: #333;
+}
+
+.invite-btn:active:not(:disabled) {
+    transform: scale(0.99);
+}
+
+.invite-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.invite-footer {
+    margin-top: 28px;
+    text-align: center;
+    font-size: 13px;
+    color: #aaa;
+}
+
+.invite-footer a {
+    color: #1a1a1a;
+    font-weight: 500;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+}
+
+@media (max-width: 420px) {
+    .invite-card-new {
+        padding: 32px 20px;
+    }
+}
+
+/* Spinners */
+.invite-spinner-new {
+    width: 20px;
+    height: 20px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: inviteSpinNew 0.8s linear infinite;
+}
+
+.invite-spinner-dark {
+    width: 36px;
+    height: 36px;
+    border: 3px solid rgba(26, 26, 26, 0.1);
+    border-radius: 50%;
+    border-top-color: #1a1a1a;
+    animation: inviteSpinNew 0.8s linear infinite;
+    margin: 0 auto 16px;
+}
+
+@keyframes inviteSpinNew {
+    to {
+        transform: rotate(360deg);
+    }
+}

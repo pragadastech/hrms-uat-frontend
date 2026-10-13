@@ -1,0 +1,180 @@
+/* Dashboard — charts, health, activity (uses SuperAdminMain tokens) */
+
+.dashboard-page {
+  --primary-accent: var(--primary-500, #6366f1);
+}
+
+.plan-distribution-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dist-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dist-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.dist-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dark-500);
+}
+
+.dist-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gray-500);
+  background: var(--gray-10);
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.progress-track {
+  height: 8px;
+  background: var(--gray-10);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.6s ease;
+}
+
+.health-grid-modern {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.health-tile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: var(--white-10, #f8fafc);
+  border-radius: 10px;
+  border: 1px solid var(--gray-10);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.health-tile:hover {
+  border-color: var(--primary-200);
+  background: var(--sa-surface, #fff);
+}
+
+.health-label-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.health-label-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dark-500);
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--gray-500);
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--gray-400);
+}
+
+.status-active .status-dot {
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+}
+
+.status-active {
+  color: #059669;
+}
+
+.activity-timeline {
+  position: relative;
+  padding-left: 24px;
+}
+
+.activity-timeline::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--gray-10);
+}
+
+.activity-node {
+  position: relative;
+  padding-bottom: 16px;
+}
+
+.activity-node:last-child {
+  padding-bottom: 0;
+}
+
+.activity-marker {
+  position: absolute;
+  left: -24px;
+  top: 4px;
+  width: 14px;
+  height: 14px;
+  background: var(--sa-surface, #fff);
+  border: 2px solid var(--primary-500);
+  border-radius: 50%;
+  z-index: 1;
+}
+
+.activity-card-inner {
+  padding: 12px 14px;
+  background: var(--white-10, #f8fafc);
+  border-radius: 10px;
+  border: 1px solid var(--gray-10);
+}
+
+.activity-header-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.activity-desc-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dark-500);
+}
+
+.activity-time-text {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  color: var(--gray-500);
+  font-weight: 500;
+  white-space: nowrap;
+}

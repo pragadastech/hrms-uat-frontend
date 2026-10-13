@@ -1,0 +1,221 @@
+.weather-bg-container {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.weather-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Layer for soft CSS floating clouds */
+.clouds-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* Base cloud contour styling using glowing glassmorphic shapes */
+.cloud {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 100px;
+  filter: blur(16px);
+  will-change: transform;
+}
+
+.cloud::before,
+.cloud::after {
+  content: '';
+  position: absolute;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 50%;
+}
+
+.cloud-1 {
+  width: 220px;
+  height: 70px;
+  top: -10px;
+  left: -20px;
+  animation: floatCloud1 45s linear infinite;
+  opacity: 0.8;
+}
+.cloud-1::before {
+  width: 90px;
+  height: 90px;
+  top: -45px;
+  left: 35px;
+}
+.cloud-1::after {
+  width: 70px;
+  height: 70px;
+  top: -30px;
+  right: 40px;
+}
+
+.cloud-2 {
+  width: 320px;
+  height: 90px;
+  top: 20px;
+  right: -50px;
+  animation: floatCloud2 65s linear infinite;
+  opacity: 0.6;
+}
+.cloud-2::before {
+  width: 130px;
+  height: 130px;
+  top: -65px;
+  left: 55px;
+}
+.cloud-2::after {
+  width: 100px;
+  height: 100px;
+  top: -45px;
+  right: 55px;
+}
+
+.cloud-3 {
+  width: 180px;
+  height: 60px;
+  top: 50px;
+  left: 25%;
+  animation: floatCloud3 85s linear infinite;
+  opacity: 0.7;
+}
+.cloud-3::before {
+  width: 75px;
+  height: 75px;
+  top: -35px;
+  left: 30px;
+}
+.cloud-3::after {
+  width: 60px;
+  height: 60px;
+  top: -25px;
+  right: 30px;
+}
+
+.cloud-4 {
+  width: 260px;
+  height: 80px;
+  top: -20px;
+  left: 55%;
+  animation: floatCloud4 105s linear infinite;
+  opacity: 0.5;
+}
+.cloud-4::before {
+  width: 105px;
+  height: 105px;
+  top: -50px;
+  left: 45px;
+}
+.cloud-4::after {
+  width: 85px;
+  height: 85px;
+  top: -35px;
+  right: 40px;
+}
+
+/* Parallax horizontal drifting keyframes */
+@keyframes floatCloud1 {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(140px, 10px, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes floatCloud2 {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(-180px, -15px, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes floatCloud3 {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(100px, 5px, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes floatCloud4 {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(-120px, 12px, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* Dynamic Cloud variations per weather type */
+.weather-sunny .cloud {
+  background: rgba(255, 255, 255, 0.08); /* Faint white clouds */
+}
+.weather-sunny .cloud::before,
+.weather-sunny .cloud::after {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.weather-cloudy .cloud {
+  background: rgba(241, 245, 249, 0.18); /* Fluffy light grey clouds */
+}
+.weather-cloudy .cloud::before,
+.weather-cloudy .cloud::after {
+  background: rgba(241, 245, 249, 0.18);
+}
+
+.weather-rainy .cloud {
+  background: rgba(186, 230, 253, 0.22); /* Soft blue rain clouds */
+}
+.weather-rainy .cloud::before,
+.weather-rainy .cloud::after {
+  background: rgba(186, 230, 253, 0.22);
+}
+
+.weather-thunderstorm .cloud {
+  background: rgba(71, 85, 105, 0.35); /* Dark dense storm clouds */
+}
+.weather-thunderstorm .cloud::before,
+.weather-thunderstorm .cloud::after {
+  background: rgba(71, 85, 105, 0.35);
+}
+
+/* Reduced Motion Compatibility */
+@media (prefers-reduced-motion: reduce) {
+  .cloud,
+  .cloud-1,
+  .cloud-2,
+  .cloud-3,
+  .cloud-4 {
+    animation: none !important;
+  }
+}
