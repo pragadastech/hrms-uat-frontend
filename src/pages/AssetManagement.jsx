@@ -563,7 +563,7 @@ export default function AssetManagement() {
         setAssignmentData({ assetId: asset.id, employeeId: '', notes: '', location: asset.location || '' });
         setShowAssignModal(true);
         if (!employees || employees.length === 0) {
-        fetchEmployees();
+            fetchEmployees();
         }
     };
 
@@ -637,14 +637,14 @@ export default function AssetManagement() {
                         <button type="button" className="asset-cta" style={{ background: '#d97706' }} onClick={() => openMaintenance(null)}>
                             <Wrench size={18} /> Log maintenance
                         </button>
-                    <button
-                        type="button"
-                        className="asset-cta"
-                        onClick={() => { setSelectedAsset(null); resetForm(); setShowAddModal(true); }}
-                    >
-                        <Plus size={18} />
-                        Add asset
-                    </button>
+                        <button
+                            type="button"
+                            className="asset-cta"
+                            onClick={() => { setSelectedAsset(null); resetForm(); setShowAddModal(true); }}
+                        >
+                            <Plus size={18} />
+                            Add asset
+                        </button>
                     </div>
                 </div>
 
@@ -1049,10 +1049,10 @@ export default function AssetManagement() {
                                     </div>
                                     <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '16px', width: '100%', marginBottom: '8px' }}>
                                         <div style={{ flex: 1 }}>
-                                    <h3 className="asset-card-title">{asset.assetName || 'Unnamed asset'}</h3>
+                                            <h3 className="asset-card-title">{asset.assetName || 'Unnamed asset'}</h3>
                                             <p className="asset-card-meta" style={{ margin: '2px 0 4px 0' }}>
-                                        {[asset.brand, asset.model].filter(Boolean).join(' · ') || asset.assetId || '—'}
-                                    </p>
+                                                {[asset.brand, asset.model].filter(Boolean).join(' · ') || asset.assetId || '—'}
+                                            </p>
                                             {asset.serialNumber && (
                                                 <p className="asset-card-meta" style={{ margin: '0 0 6px 0', fontSize: '11.5px', color: '#64748b' }}>
                                                     Serial: <strong style={{ color: '#334155' }}>{asset.serialNumber}</strong>
@@ -1106,12 +1106,12 @@ export default function AssetManagement() {
                                         )}
                                     </div>
                                     <div>
-                                    <span
-                                        className="asset-card-status"
+                                        <span
+                                            className="asset-card-status"
                                             style={{ background: status.bg, color: status.color, display: 'inline-block', marginBottom: '8px' }}
-                                    >
-                                        {status.label}
-                                    </span>
+                                        >
+                                            {status.label}
+                                        </span>
                                         {asset.quantity > 1 && (
                                             <div style={{ display: 'flex', gap: '12px', marginBottom: '10px', background: '#f8fafc', padding: '6px 12px', borderRadius: '6px', border: '1px dashed #cbd5e1', fontSize: '12px', color: '#475569', width: 'fit-content' }}>
                                                 <span>Total: <strong>{asset.quantity}</strong></span>
@@ -1119,35 +1119,35 @@ export default function AssetManagement() {
                                                 <span>Available: <strong style={{ color: '#4f46e5' }}>{asset.availableQuantity ?? (asset.quantity - (asset.assignedQuantity ?? 0))}</strong></span>
                                             </div>
                                         )}
-                                    {asset.assignedToName && (
+                                        {asset.assignedToName && (
                                             <div className="asset-card-assignee" style={{ margin: 0 }}>
-                                            <span className="avatar">{asset.assignedToName.charAt(0)}</span>
-                                            <span>{asset.assignedToName}</span>
-                                        </div>
-                                    )}
+                                                <span className="avatar">{asset.assignedToName.charAt(0)}</span>
+                                                <span>{asset.assignedToName}</span>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="asset-card-actions" style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', gap: '8px', borderTop: '1px solid var(--asset-border)', paddingTop: '14px', height: '40px' }}>
                                          <div style={{ display: 'flex', gap: '8px', flex: 1, alignItems: 'center' }}>
-                                        {asset.status === 'AVAILABLE' && (
-                                            <button
-                                                type="button"
-                                                className="asset-action-assign"
+                                             {asset.status === 'AVAILABLE' && (
+                                                 <button
+                                                     type="button"
+                                                     className="asset-action-assign"
                                                      style={{ flex: 1, background: '#4f46e5', color: '#fff', height: '40px', padding: '0 12px', borderRadius: '8px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer', border: 'none', fontSize: '13px' }}
-                                                onClick={() => openAssignModal(asset)}
-                                            >
+                                                     onClick={() => openAssignModal(asset)}
+                                                 >
                                                      <UserPlus size={16} /> Assign
-                                            </button>
-                                        )}
-                                        {asset.status === 'ASSIGNED' && (
+                                                 </button>
+                                             )}
+                                             {asset.status === 'ASSIGNED' && (
                                                  <>
-                                            <button
-                                                type="button"
-                                                className="asset-action-return"
+                                                     <button
+                                                         type="button"
+                                                         className="asset-action-return"
                                                          style={{ flex: 1, background: '#f59e0b', color: '#fff', height: '40px', padding: '0 12px', borderRadius: '8px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer', border: 'none', fontSize: '13px' }}
-                                                onClick={() => handleReturnAsset(asset.id)}
-                                            >
+                                                         onClick={() => handleReturnAsset(asset.id)}
+                                                     >
                                                          <RefreshCw size={16} /> Return
-                                            </button>
+                                                     </button>
                                                      <button 
                                                          type="button" 
                                                          style={{ flex: 1, background: '#10b981', color: '#fff', height: '40px', padding: '0 12px', borderRadius: '8px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer', border: 'none', fontSize: '13px' }} 
@@ -1164,13 +1164,13 @@ export default function AssetManagement() {
                                                      onClick={() => handleReturnAsset(asset.id)}
                                                  >
                                                      <RefreshCw size={16} /> Complete
-                                        </button>
+                                                 </button>
                                              )}
                                          </div>
  
                                          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                                        <button
-                                            type="button"
+                                             <button
+                                                 type="button"
                                                  onClick={(e) => {
                                                      e.stopPropagation();
                                                      setActiveDropdownId(activeDropdownId === asset.id ? null : asset.id);
@@ -1260,11 +1260,11 @@ export default function AssetManagement() {
                                                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                                      >
                                                          <Trash2 size={14} /> Delete Asset
-                                        </button>
+                                                     </button>
                                                  </div>
                                              )}
                                          </div>
-                                    </div>
+                                     </div>
                                 </div>
                             );
                         })}

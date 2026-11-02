@@ -640,7 +640,7 @@ const ManagerAnalytics = ({ defaultTab = 'overview', isStandalone = false, showA
 
       {/* Side Drawer / Modal for Employee Details */}
       <EmployeeModal emp={selectedEmployee} onClose={() => setSelectedEmployee(null)} allEntries={tsAllEntries} />
-      <LeaveModal emp={selectedEmployee} onClose={() => setSelectedEmployee(null)} allLeaves={allLeavesForSummary} onAction={handleLeaveAction} />
+      <LeaveModal emp={selectedEmployee} onClose={() => setSelectedEmployee(null)} allLeaves={allLeavesForSummary} onAction={handleLeaveAction} teamBalances={teamBalances} />
 
       {/* Custom Styles for Timesheet Dashboard */}
       <style>{`
@@ -3393,7 +3393,7 @@ function renderLeaves(leaves, statusCounts, year, setYear, statusFilter, setStat
                   <strong>Sick:</strong> {sickData.available} Avail / {sickConsumed} Consumed
                 </div>
                 <div className="lv-sig-item" style={{ color: '#9ca3b0', marginTop: '4px' }}>
-                  📅 Last leave: {emp.lastLeave ? formatDate(emp.lastLeave) : 'Never'}
+                  📅 Last leave: {displayEmp.lastLeave ? formatDate(displayEmp.lastLeave) : 'Never'}
                 </div>
               </div>
             </div>
@@ -3411,8 +3411,8 @@ function renderLeaves(leaves, statusCounts, year, setYear, statusFilter, setStat
   );
 }
 
-const LeaveModal = ({ emp, onClose, allLeaves, onAction }) => {
-  const [mTab, setMTab] = useState('PENDING');
+const LeaveModal = ({ emp, onClose, allLeaves, onAction, teamBalances = {} }) => {
+  const [mTab, setMTab] = useState('OVERVIEW');
   const [adjustments, setAdjustments] = useState([]);
   const [adjLoading, setAdjLoading] = useState(false);
   const [confirmingLeave, setConfirmingLeave] = useState(null);
@@ -3442,162 +3442,441 @@ const LeaveModal = ({ emp, onClose, allLeaves, onAction }) => {
   const empLeaves = allLeaves.filter(l => l.employeeId === emp.id);
   const filtered = empLeaves.filter(l => l.status === mTab);
 
+  // Extract all leave type balances for this employee
+  const empIdNorm = String(emp.id).toUpperCase();
+  const rawBalances = teamBalances[empIdNorm] || {};
+
+  // Standard friendly names and badges for known leave types
+  const LEAVE_TYPE_META = {
+    'ANNUAL_LEAVE': { label: 'Annual Leave', code: 'AL', color: '#10b981', bg: '#ecfdf5' },
+    'AL': { label: 'Annual Leave', code: 'AL', color: '#10b981', bg: '#ecfdf5' },
+    'SICK_LEAVE': { label: 'Sick Leave', code: 'SL', color: '#ef4444', bg: '#fef2f2' },
+    'SL': { label: 'Sick Leave', code: 'SL', color: '#ef4444', bg: '#fef2f2' },
+    'CASUAL_LEAVE': { label: 'Casual Leave', code: 'CL', color: '#3b82f6', bg: '#eff6ff' },
+    'CL': { label: 'Casual Leave', code: 'CL', color: '#3b82f6', bg: '#eff6ff' },
+    'MATERNITY_LEAVE': { label: 'Maternity Leave', code: 'ML', color: '#ec4899', bg: '#fdf2f8' },
+    'ML': { label: 'Maternity Leave', code: 'ML', color: '#ec4899', bg: '#fdf2f8' },
+    'PATERNITY_LEAVE': { label: 'Paternity Leave', code: 'PL', color: '#8b5cf6', bg: '#f5f3ff' },
+    'PL': { label: 'Paternity Leave', code: 'PL', color: '#8b5cf6', bg: '#f5f3ff' },
+    'BEREAVEMENT_LEAVE': { label: 'Bereavement Leave', code: 'BL', color: '#64748b', bg: '#f8fafc' },
+    'BL': { label: 'Bereavement Leave', code: 'BL', color: '#64748b', bg: '#f8fafc' },
+    'COMPENSATORY_OFF': { label: 'Compensatory Off', code: 'CO', color: '#f59e0b', bg: '#fffbeb' },
+    'CO': { label: 'Compensatory Off', code: 'CO', color: '#f59e0b', bg: '#fffbeb' },
+    'UNPAID_LEAVE': { label: 'Unpaid Leave', code: 'UL', color: '#94a3b8', bg: '#f1f5f9' },
+    'UL': { label: 'Unpaid Leave', code: 'UL', color: '#94a3b8', bg: '#f1f5f9' }
+  };
+
+  // Build unified list of all leave types
+  const leaveTypesMap = {};
+  // 1. Seed with Annual & Sick from emp object
+  leaveTypesMap['Annual Leave'] = {
+    code: 'AL',
+    label: 'Annual Leave',
+    available: emp.annualAvail || 0,
+    consumed: emp.annualConsumed || 0,
+    quota: (emp.annualAvail || 0) + (emp.annualConsumed || 0),
+    color: '#10b981',
+    bg: '#ecfdf5'
+  };
+  leaveTypesMap['Sick Leave'] = {
+    code: 'SL',
+    label: 'Sick Leave',
+    available: emp.sickAvail || 0,
+    consumed: emp.sickConsumed || 0,
+    quota: (emp.sickAvail || 0) + (emp.sickConsumed || 0),
+    color: '#ef4444',
+    bg: '#fef2f2'
+  };
+
+  // 2. Add all items from rawBalances
+  Object.entries(rawBalances).forEach(([typeKey, data]) => {
+    const meta = LEAVE_TYPE_META[typeKey] || {
+      label: typeKey.replace(/_/g, ' '),
+      code: typeKey.substring(0, 3).toUpperCase(),
+      color: '#6366f1',
+      bg: '#eef2ff'
+    };
+    const avail = Number(data.available || 0);
+    const used = Number(data.used || 0);
+    const q = Number(data.quota || (avail + used) || 0);
+    const consumed = q > 0 ? Math.max(0, q - avail) : used;
+
+    leaveTypesMap[meta.label] = {
+      code: meta.code,
+      label: meta.label,
+      available: avail,
+      consumed: consumed,
+      quota: q,
+      color: meta.color,
+      bg: meta.bg
+    };
+  });
+
+  const allLeaveTypesList = Object.values(leaveTypesMap);
+
+  // Leave Breakdown & Stats calculation
+  const totalApprovedLeaves = empLeaves.filter(l => l.status === 'APPROVED');
+  const totalPendingLeaves = empLeaves.filter(l => l.status === 'PENDING');
+  const totalRejectedLeaves = empLeaves.filter(l => l.status === 'REJECTED');
+  const totalCancelledLeaves = empLeaves.filter(l => l.status === 'CANCELLED');
+
+  const approvedDays = totalApprovedLeaves.reduce((acc, l) => acc + (Number(l.totalDays) || 1), 0);
+  const pendingDays = totalPendingLeaves.reduce((acc, l) => acc + (Number(l.totalDays) || 1), 0);
+
+  // Monthly Leave Trend (Jan - Dec)
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const monthlyTrendData = monthNames.map((m, idx) => ({ month: m, approved: 0, pending: 0 }));
+
+  empLeaves.forEach(l => {
+    if (l.startDate) {
+      const dt = new Date(l.startDate);
+      if (!isNaN(dt.getTime())) {
+        const mIdx = dt.getMonth();
+        const days = Number(l.totalDays) || 1;
+        if (l.status === 'APPROVED') monthlyTrendData[mIdx].approved += days;
+        else if (l.status === 'PENDING') monthlyTrendData[mIdx].pending += days;
+      }
+    }
+  });
+
+  // Leave Type Distribution Chart Data
+  const typeDistributionData = allLeaveTypesList
+    .filter(t => t.consumed > 0 || t.available > 0)
+    .map(t => ({
+      name: t.label,
+      consumed: t.consumed,
+      available: t.available
+    }));
+
   return (
     <div className="ts-overlay open" onClick={(e) => e.target.className.includes('ts-overlay') && onClose()}>
-      <div className="ts-modal">
+      <div className="ts-modal" style={{ maxWidth: '820px' }}>
         <button className="ts-modal-close" onClick={onClose}>✕</button>
         
-        <div className="ts-modal-head">
+        <div className="ts-modal-head" style={{ marginBottom: '14px' }}>
           <div className="ts-m-av" style={{ background: COLORS_PALETTE[3] + '20', color: COLORS_PALETTE[3] }}>
             {emp.name?.split(' ').map(n=>n[0]).join('')}
           </div>
           <div>
-            <div className="ts-m-name">{emp.name}</div>
-            <div className="ts-m-meta">{emp.id} · {emp.dept}</div>
+            <div className="ts-m-name" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {emp.name}
+              <span style={{ fontSize: '11px', fontWeight: 600, background: '#eff6ff', color: '#2563eb', padding: '2px 8px', borderRadius: '12px' }}>
+                {emp.dept || 'Team Member'}
+              </span>
+            </div>
+            <div className="ts-m-meta">{emp.id} · Total Leaves Tracked: {empLeaves.length}</div>
           </div>
         </div>
 
-        {/* Detailed Balance Summary */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '1.25rem' }}>
-          <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>Annual Leave</div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '18px', fontWeight: 700, color: '#10b981' }}>{emp.annualAvail || 0} <span style={{ fontSize: '12px', fontWeight: 500, color: '#94a3b8' }}>Avail</span></span>
-              <span style={{ fontSize: '18px', fontWeight: 700, color: '#3b82f6' }}>{emp.annualConsumed || 0} <span style={{ fontSize: '12px', fontWeight: 500, color: '#94a3b8' }}>Consumed</span></span>
-            </div>
-          </div>
-          <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>Sick Leave</div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '18px', fontWeight: 700, color: '#8b5cf6' }}>{emp.sickAvail || 0} <span style={{ fontSize: '12px', fontWeight: 500, color: '#94a3b8' }}>Avail</span></span>
-              <span style={{ fontSize: '18px', fontWeight: 700, color: '#ef4444' }}>{emp.sickConsumed || 0} <span style={{ fontSize: '12px', fontWeight: 500, color: '#94a3b8' }}>Consumed</span></span>
-            </div>
-          </div>
-        </div>
-
+        {/* Tab Selection */}
         <div className="ts-chip-group" style={{ marginBottom: '1.25rem', justifyContent: 'flex-start' }}>
-          <button className={`ts-chip ${mTab === 'PENDING' ? 'active' : ''}`} onClick={() => setMTab('PENDING')}>Applied</button>
-          <button className={`ts-chip ${mTab === 'APPROVED' ? 'active' : ''}`} onClick={() => setMTab('APPROVED')}>Approved</button>
-          <button className={`ts-chip ${mTab === 'REJECTED' ? 'active' : ''}`} onClick={() => setMTab('REJECTED')}>Rejected</button>
-          <button className={`ts-chip ${mTab === 'CANCELLED' ? 'active' : ''}`} onClick={() => setMTab('CANCELLED')}>Cancelled</button>
-          <button className={`ts-chip ${mTab === 'ADJUSTMENTS' ? 'active' : ''}`} onClick={() => setMTab('ADJUSTMENTS')}>Adjustments</button>
+          <button className={`ts-chip ${mTab === 'OVERVIEW' ? 'active' : ''}`} onClick={() => setMTab('OVERVIEW')}>
+            📊 Overview
+          </button>
+          <button className={`ts-chip ${mTab === 'PENDING' ? 'active' : ''}`} onClick={() => setMTab('PENDING')}>
+            Applied ({totalPendingLeaves.length})
+          </button>
+          <button className={`ts-chip ${mTab === 'APPROVED' ? 'active' : ''}`} onClick={() => setMTab('APPROVED')}>
+            Approved ({totalApprovedLeaves.length})
+          </button>
+          <button className={`ts-chip ${mTab === 'REJECTED' ? 'active' : ''}`} onClick={() => setMTab('REJECTED')}>
+            Rejected ({totalRejectedLeaves.length})
+          </button>
+          <button className={`ts-chip ${mTab === 'CANCELLED' ? 'active' : ''}`} onClick={() => setMTab('CANCELLED')}>
+            Cancelled ({totalCancelledLeaves.length})
+          </button>
+          <button className={`ts-chip ${mTab === 'ADJUSTMENTS' ? 'active' : ''}`} onClick={() => setMTab('ADJUSTMENTS')}>
+            Adjustments
+          </button>
         </div>
 
-        <div style={{ maxHeight: '300px', overflowY: 'auto', paddingRight: '4px' }}>
-          {mTab === 'ADJUSTMENTS' ? (
-             adjLoading ? (
-               <div style={{ textAlign: 'center', padding: '2rem' }}><RefreshCw size={20} className="spin" /></div>
-             ) : (
-               adjustments.length === 0 ? (
-                 <div style={{ textAlign: 'center', padding: '2rem', color: '#9ca3b0', fontSize: '13px' }}>No adjustments recorded.</div>
-               ) : (
-                 adjustments.map((adj, idx) => (
-                   <div key={idx} className="ts-card" style={{ padding: '1rem', marginBottom: '10px', border: '1px solid rgba(0,0,0,0.06)', borderLeft: `4px solid ${adj.adjustmentType === 'ADDITION' ? '#10b981' : '#ef4444'}` }}>
-                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                       <span style={{ fontWeight: 700, fontSize: '14px' }}>{adj.leaveType?.replace('_', ' ')}</span>
-                       <span style={{ fontSize: '13px', fontWeight: 700, color: adj.adjustmentType === 'ADDITION' ? '#10b981' : '#ef4444' }}>
-                         {adj.adjustmentType === 'ADDITION' ? '+' : '-'}{Math.abs(adj.daysChanged || 0)} Days
-                       </span>
-                     </div>
-                     <div style={{ fontSize: '12px', color: '#9ca3b0', marginBottom: '10px' }}>
-                       Adjusted on: {formatDate(adj.timestamp || adj.createdAt || adj.adjustmentDate)}
-                     </div>
-                     <div style={{ fontSize: '13px', color: '#5c6070', fontStyle: 'italic', background: '#f7f8fa', padding: '8px', borderRadius: '8px' }}>
-                       &ldquo;{adj.reason || 'No reason provided'}&rdquo;
-                     </div>
-                   </div>
-                 ))
-               )
-             )
-          ) : (
-            filtered.map((l, idx) => (
-              <div key={idx} className="ts-card" style={{ padding: '1rem', marginBottom: '10px', border: '1px solid rgba(0,0,0,0.06)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span style={{ fontWeight: 700, fontSize: '14px' }}>{l.leaveType}</span>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#2563eb' }}>{l.totalDays} Days</span>
-                </div>
-                <div style={{ fontSize: '12px', color: '#9ca3b0', marginBottom: '10px' }}>
-                  {formatDate(l.startDate)} &mdash; {formatDate(l.endDate)}
-                </div>
-                <div style={{ fontSize: '13px', color: '#5c6070', fontStyle: 'italic', background: '#f7f8fa', padding: '8px', borderRadius: '8px' }}>
-                  &ldquo;{l.reason || 'No reason provided'}&rdquo;
-                </div>
-
-                {mTab === 'PENDING' && (
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-                    <button 
-                      type="button"
-                      className="lv-btn-acc" 
-                      onClick={async () => {
-                        try {
-                          setProcessingAction({ id: l.id, type: 'approve' });
-                          await onAction(l.id, 'approve');
-                        } catch (err) {
-                        } finally {
-                          setProcessingAction({ id: null, type: null });
-                        }
-                      }}
-                      disabled={processingAction.id !== null}
-                      style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-                    >
-                      {processingAction.id === l.id && processingAction.type === 'approve' ? (
-                        <>
-                          <RefreshCw size={14} className="ts-spin" style={{ animation: 'spin 1s linear infinite' }} />
-                          Approving...
-                        </>
-                      ) : (
-                        'Approve'
-                      )}
-                    </button>
-                    <button 
-                      type="button"
-                      className="lv-btn-rej" 
-                      onClick={async () => {
-                        try {
-                          setProcessingAction({ id: l.id, type: 'reject' });
-                          await onAction(l.id, 'reject');
-                        } catch (err) {
-                        } finally {
-                          setProcessingAction({ id: null, type: null });
-                        }
-                      }}
-                      disabled={processingAction.id !== null}
-                      style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-                    >
-                      {processingAction.id === l.id && processingAction.type === 'reject' ? (
-                        <>
-                          <RefreshCw size={14} className="ts-spin" style={{ animation: 'spin 1s linear infinite' }} />
-                          Rejecting...
-                        </>
-                      ) : (
-                        'Reject'
-                      )}
-                    </button>
-                    <button 
-                      type="button"
-                      className="lv-btn-grey" 
-                      onClick={() => { setConfirmingLeave(l); setCancelReason(''); }}
-                      disabled={processingAction.id !== null}
-                    >
-                      Cancel Leave
-                    </button>
-                  </div>
-                )}
-
-                {mTab === 'APPROVED' && (
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-                    <button className="lv-btn-rej" onClick={() => { setConfirmingLeave(l); setCancelReason(''); }}>Cancel Leave</button>
-                  </div>
-                )}
+        {/* Content Body */}
+        {mTab === 'OVERVIEW' ? (
+          <div style={{ maxHeight: '520px', overflowY: 'auto', paddingRight: '4px' }}>
+            {/* Top Stat Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '1.25rem' }}>
+              <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>Available Total</div>
+                <div style={{ fontSize: '22px', fontWeight: 700, color: '#10b981', marginTop: '2px' }}>{emp.available || 0}</div>
+                <div style={{ fontSize: '11px', color: '#94a3b8' }}>Days remaining</div>
               </div>
-            ))
-          )}
-          {mTab !== 'ADJUSTMENTS' && filtered.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '2rem', color: '#9ca3b0', fontSize: '13px' }}>
-              No {mTab.toLowerCase()} leave requests found for this period.
+
+              <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>Consumed Total</div>
+                <div style={{ fontSize: '22px', fontWeight: 700, color: '#3b82f6', marginTop: '2px' }}>{emp.used || approvedDays || 0}</div>
+                <div style={{ fontSize: '11px', color: '#94a3b8' }}>Days taken</div>
+              </div>
+
+              <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>Pending Review</div>
+                <div style={{ fontSize: '22px', fontWeight: 700, color: '#f59e0b', marginTop: '2px' }}>{pendingDays}</div>
+                <div style={{ fontSize: '11px', color: '#94a3b8' }}>{totalPendingLeaves.length} request(s)</div>
+              </div>
+
+              <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>Quota Utilization</div>
+                <div style={{ fontSize: '22px', fontWeight: 700, color: '#8b5cf6', marginTop: '2px' }}>
+                  {emp.quota > 0 ? Math.round(((emp.used || approvedDays) / emp.quota) * 100) : 0}%
+                </div>
+                <div style={{ fontSize: '11px', color: '#94a3b8' }}>Of {emp.quota || 18} quota</div>
+              </div>
             </div>
-          )}
-        </div>
+
+            {/* Graphs Section */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '14px', marginBottom: '1.25rem' }}>
+              {/* Monthly Trend Chart */}
+              <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>Monthly Leave Activity (Days)</span>
+                  <div style={{ display: 'flex', gap: '8px', fontSize: '11px' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#10b981' }}>
+                      <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: '#10b981' }}></span> Approved
+                    </span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#f59e0b' }}>
+                      <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: '#f59e0b' }}></span> Pending
+                    </span>
+                  </div>
+                </div>
+                <div style={{ width: '100%', height: '170px' }}>
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                    <BarChart data={monthlyTrendData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
+                      <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} allowDecimals={false} />
+                      <Tooltip 
+                        contentStyle={{ fontSize: '12px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }} 
+                        formatter={(val) => [`${val} Days`, '']}
+                      />
+                      <Bar dataKey="approved" stackId="a" fill="#10b981" radius={[0, 0, 0, 0]} barSize={12} />
+                      <Bar dataKey="pending" stackId="a" fill="#f59e0b" radius={[3, 3, 0, 0]} barSize={12} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Leave Type Breakdown Chart */}
+              <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b', display: 'block', marginBottom: '10px' }}>
+                  Leave Type Usage vs Balance
+                </span>
+                <div style={{ width: '100%', height: '170px' }}>
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                    <BarChart data={typeDistributionData} layout="vertical" margin={{ top: 5, right: 15, left: 10, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(0,0,0,0.05)" />
+                      <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} allowDecimals={false} />
+                      <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#475569' }} width={80} />
+                      <Tooltip 
+                        contentStyle={{ fontSize: '12px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                        formatter={(val, name) => [`${val} Days`, name === 'consumed' ? 'Consumed' : 'Available']}
+                      />
+                      <Bar dataKey="consumed" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={10} />
+                      <Bar dataKey="available" fill="#10b981" radius={[0, 4, 4, 0]} barSize={10} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            {/* All Types Leaves Cards & Info */}
+            <div style={{ marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>All Leave Types Breakdown & Quotas</span>
+                <span style={{ fontSize: '11px', color: '#64748b' }}>{allLeaveTypesList.length} leave categories configured</span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: '10px' }}>
+                {allLeaveTypesList.map((lt, idx) => {
+                  const usedPct = lt.quota > 0 ? Math.min(100, Math.round((lt.consumed / lt.quota) * 100)) : 0;
+                  return (
+                    <div 
+                      key={idx} 
+                      style={{ 
+                        background: '#f8fafc', 
+                        border: '1px solid #e2e8f0', 
+                        borderRadius: '10px', 
+                        padding: '12px',
+                        borderLeft: `4px solid ${lt.color}`
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>{lt.label}</div>
+                          <div style={{ fontSize: '11px', color: '#94a3b8' }}>Code: {lt.code}</div>
+                        </div>
+                        <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 6px', borderRadius: '6px', background: lt.bg, color: lt.color }}>
+                          {lt.quota > 0 ? `${lt.quota}d Quota` : 'Standard'}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', marginBottom: '6px' }}>
+                        <span style={{ color: '#059669', fontWeight: 600 }}>Available: <strong>{lt.available}</strong>d</span>
+                        <span style={{ color: '#475569' }}>Consumed: <strong>{lt.consumed}</strong>d</span>
+                      </div>
+
+                      <div style={{ height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
+                        <div style={{ width: `${usedPct}%`, height: '100%', background: lt.color, borderRadius: '3px' }}></div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Recent Leave History Preview */}
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px', marginBottom: '0.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>Recent Leave Applications</span>
+                <span style={{ fontSize: '11px', color: '#64748b' }}>Last {Math.min(3, empLeaves.length)} of {empLeaves.length} applications</span>
+              </div>
+              {empLeaves.length === 0 ? (
+                <div style={{ fontSize: '12px', color: '#94a3b8', fontStyle: 'italic', textAlign: 'center', padding: '10px' }}>
+                  No leave requests recorded for this team member.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {empLeaves.slice(0, 3).map((l, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', background: '#f8fafc', borderRadius: '8px', fontSize: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontWeight: 600, color: '#1e293b' }}>{l.leaveType}</span>
+                        <span style={{ color: '#64748b' }}>({formatDate(l.startDate)} &mdash; {formatDate(l.endDate)})</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontWeight: 600, color: '#2563eb' }}>{l.totalDays} Days</span>
+                        <span style={{ 
+                          fontSize: '10px', 
+                          fontWeight: 700, 
+                          padding: '2px 6px', 
+                          borderRadius: '4px',
+                          background: l.status === 'APPROVED' ? '#ecfdf5' : l.status === 'PENDING' ? '#fffbeb' : '#fef2f2',
+                          color: l.status === 'APPROVED' ? '#059669' : l.status === 'PENDING' ? '#d97706' : '#dc2626'
+                        }}>
+                          {l.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* Other Tabs: PENDING, APPROVED, REJECTED, CANCELLED, ADJUSTMENTS */
+          <div style={{ maxHeight: '380px', overflowY: 'auto', paddingRight: '4px' }}>
+            {mTab === 'ADJUSTMENTS' ? (
+               adjLoading ? (
+                 <div style={{ textAlign: 'center', padding: '2rem' }}><RefreshCw size={20} className="spin" /></div>
+               ) : (
+                 adjustments.length === 0 ? (
+                   <div style={{ textAlign: 'center', padding: '2rem', color: '#9ca3b0', fontSize: '13px' }}>No adjustments recorded.</div>
+                 ) : (
+                   adjustments.map((adj, idx) => (
+                     <div key={idx} className="ts-card" style={{ padding: '1rem', marginBottom: '10px', border: '1px solid rgba(0,0,0,0.06)', borderLeft: `4px solid ${adj.adjustmentType === 'ADDITION' ? '#10b981' : '#ef4444'}` }}>
+                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                         <span style={{ fontWeight: 700, fontSize: '14px' }}>{adj.leaveType?.replace('_', ' ')}</span>
+                         <span style={{ fontSize: '13px', fontWeight: 700, color: adj.adjustmentType === 'ADDITION' ? '#10b981' : '#ef4444' }}>
+                           {adj.adjustmentType === 'ADDITION' ? '+' : '-'}{Math.abs(adj.daysChanged || 0)} Days
+                         </span>
+                       </div>
+                       <div style={{ fontSize: '12px', color: '#9ca3b0', marginBottom: '10px' }}>
+                         Adjusted on: {formatDate(adj.timestamp || adj.createdAt || adj.adjustmentDate)}
+                       </div>
+                       <div style={{ fontSize: '13px', color: '#5c6070', fontStyle: 'italic', background: '#f7f8fa', padding: '8px', borderRadius: '8px' }}>
+                         &ldquo;{adj.reason || 'No reason provided'}&rdquo;
+                       </div>
+                     </div>
+                   ))
+                 )
+               )
+            ) : (
+              filtered.map((l, idx) => (
+                <div key={idx} className="ts-card" style={{ padding: '1rem', marginBottom: '10px', border: '1px solid rgba(0,0,0,0.06)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <span style={{ fontWeight: 700, fontSize: '14px' }}>{l.leaveType}</span>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#2563eb' }}>{l.totalDays} Days</span>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#9ca3b0', marginBottom: '10px' }}>
+                    {formatDate(l.startDate)} &mdash; {formatDate(l.endDate)}
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#5c6070', fontStyle: 'italic', background: '#f7f8fa', padding: '8px', borderRadius: '8px' }}>
+                    &ldquo;{l.reason || 'No reason provided'}&rdquo;
+                  </div>
+
+                  {mTab === 'PENDING' && (
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                      <button 
+                        type="button"
+                        className="lv-btn-acc" 
+                        onClick={async () => {
+                          try {
+                            setProcessingAction({ id: l.id, type: 'approve' });
+                            await onAction(l.id, 'approve');
+                          } catch (err) {
+                          } finally {
+                            setProcessingAction({ id: null, type: null });
+                          }
+                        }}
+                        disabled={processingAction.id !== null}
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        {processingAction.id === l.id && processingAction.type === 'approve' ? (
+                          <>
+                            <RefreshCw size={14} className="ts-spin" style={{ animation: 'spin 1s linear infinite' }} />
+                            Approving...
+                          </>
+                        ) : (
+                          'Approve'
+                        )}
+                      </button>
+                      <button 
+                        type="button"
+                        className="lv-btn-rej" 
+                        onClick={async () => {
+                          try {
+                            setProcessingAction({ id: l.id, type: 'reject' });
+                            await onAction(l.id, 'reject');
+                          } catch (err) {
+                          } finally {
+                            setProcessingAction({ id: null, type: null });
+                          }
+                        }}
+                        disabled={processingAction.id !== null}
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        {processingAction.id === l.id && processingAction.type === 'reject' ? (
+                          <>
+                            <RefreshCw size={14} className="ts-spin" style={{ animation: 'spin 1s linear infinite' }} />
+                            Rejecting...
+                          </>
+                        ) : (
+                          'Reject'
+                        )}
+                      </button>
+                      <button 
+                        type="button"
+                        className="lv-btn-grey" 
+                        onClick={() => { setConfirmingLeave(l); setCancelReason(''); }}
+                        disabled={processingAction.id !== null}
+                      >
+                        Cancel Leave
+                      </button>
+                    </div>
+                  )}
+
+                  {mTab === 'APPROVED' && (
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                      <button className="lv-btn-rej" onClick={() => { setConfirmingLeave(l); setCancelReason(''); }}>Cancel Leave</button>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+            {mTab !== 'ADJUSTMENTS' && filtered.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '2rem', color: '#9ca3b0', fontSize: '13px' }}>
+                No {mTab.toLowerCase()} leave requests found for this period.
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="ts-modal-ai">
           <div className="ts-ai-dot" style={{ flexShrink: 0, marginTop: '3px', background: '#2563eb' }}></div>

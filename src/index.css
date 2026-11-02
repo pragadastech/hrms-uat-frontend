@@ -223,10 +223,10 @@ body,
 #root {
   height: 100vh;
   height: 100dvh;
-  width: 100vw;
+  width: 100%;
   min-height: 100vh;
-  height: 100dvh;
-  min-width: 100vw;
+  min-width: 100%;
+  max-width: 100%;
   margin: 0;
   padding: 0;
   box-sizing: border-box;
@@ -8747,11 +8747,14 @@ td {
     height: auto;
     min-height: 48px;
     max-height: none;
-    padding: 8px 10px;
+    padding: 8px 12px;
     flex-wrap: nowrap;
-    gap: 6px;
+    gap: 8px;
     position: relative;
-    /* Fix for absolute positioning of dropdowns */
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden;
   }
 
   .header-premium .header-left {
@@ -8782,16 +8785,20 @@ td {
   }
 
   .header-premium .header-right {
-    gap: 6px;
+    gap: 8px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
   }
 
   .header-search-btn {
     min-width: 0;
-    width: 36px;
-    height: 36px;
+    width: 34px;
+    height: 34px;
     padding: 0;
     justify-content: center;
     border-radius: 8px;
+    flex-shrink: 0;
   }
 
   .header-search-btn .search-placeholder,
@@ -8800,31 +8807,53 @@ td {
   }
 
   .notification-btn {
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
+    position: relative;
+    flex-shrink: 0;
   }
 
   .notification-btn svg {
-    width: 16px;
+    width: 18px;
+    height: 18px;
+  }
+
+  .notification-badge {
+    position: absolute;
+    top: -2px;
+    right: -4px;
+    min-width: 16px;
+    max-width: 28px;
     height: 16px;
+    padding: 0 4px;
+    font-size: 9px;
+    font-weight: 700;
+    border-radius: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .user-btn {
-    padding: 4px 6px;
-    gap: 6px;
+    padding: 2px;
+    gap: 0;
+    flex-shrink: 0;
   }
 
   .user-avatar {
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
   }
 
-  .header-premium .user-info {
-    display: none;
+  .header-premium .user-info,
+  .user-btn .user-info {
+    display: none !important;
   }
 
-  .header-premium .chevron {
-    display: none;
+  .header-premium .chevron,
+  .user-btn .chevron {
+    display: none !important;
   }
 
   .notification-dropdown {
@@ -8850,8 +8879,9 @@ td {
 /* Very small mobile (≤480px) */
 @media (max-width: 480px) {
   .header-premium {
-    padding: 6px 8px;
+    padding: 6px 10px;
     min-height: 44px;
+    gap: 6px;
   }
 
   .header-premium .header-title {
@@ -8867,9 +8897,23 @@ td {
     height: 28px;
   }
 
+  .header-premium .header-right {
+    gap: 6px;
+  }
+
   .header-search-btn {
-    width: 32px;
-    height: 32px;
+    width: 30px;
+    height: 30px;
+  }
+
+  .notification-btn {
+    width: 30px;
+    height: 30px;
+  }
+
+  .user-avatar {
+    width: 30px;
+    height: 30px;
   }
 
   .page-content {

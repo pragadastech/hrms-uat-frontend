@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { reportingAPI, respondToLeaveRequest, getPendingLeaveRequests, getAllLeaveRequests, getAcceptedLeaveRequests, adminAPI, teamAPI, wfhAPI, exitAPI, managerAnalyticsAPI, leaveBalanceAPI, employeeAPI, timeEntryAPI, managerAssetAPI, unifiedEmployeeAPI } from '../services/api';
+import { reportingAPI, respondToLeaveRequest, getPendingLeaveRequests, getAllLeaveRequests, getAcceptedLeaveRequests, adminAPI, teamAPI, wfhAPI, exitAPI, managerAnalyticsAPI, leaveBalanceAPI, employeeAPI, timeEntryAPI, managerAssetAPI, unifiedEmployeeAPI, delegationAPI } from '../services/api';
 import { formatTimeTo12h, formatDateLocal, resolveAttendanceEmployeeCode, resolveAttendanceClockTime, formatHoursAndMinutes, getTimesheetEntryHours } from '../utils/timeUtils';
 import { formatLeaveTypeLabel, formatWorkLocationLabel, isWfhCode } from '../utils/labelUtils';
 import api from '../services/api';
@@ -33,7 +33,9 @@ import {
     CalendarDays,
     MessageSquare,
     Monitor,
-    UserPlus
+    UserPlus,
+    ArrowRight,
+    Shield
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import Header from '../components/Header';
@@ -185,11 +187,26 @@ const Team = () => {
     const [showExitModal, setShowExitModal] = useState(false);
     const [currentTime, setCurrentTime] = useState(new Date());
     const [approvalFilter, setApprovalFilter] = useState('all');
+    const [approvalSourceFilter, setApprovalSourceFilter] = useState('all'); // 'all', 'direct', 'delegated'
     const [submittingAction, setSubmittingAction] = useState({ id: null, action: null });
     const [showDecisionModal, setShowDecisionModal] = useState(false);
     const [decisionAction, setDecisionAction] = useState('APPROVE'); // 'APPROVE' or 'REJECT'
     const [activeRequest, setActiveRequest] = useState(null);
     const [decisionComment, setDecisionComment] = useState('');
+
+    // Delegation management state
+    const [myDelegations, setMyDelegations] = useState({ assignedByMe: [], delegatedToMe: [] });
+    const [eligibleDelegates, setEligibleDelegates] = useState([]);
+    const [showDelegationModal, setShowDelegationModal] = useState(false);
+    const [creatingDelegation, setCreatingDelegation] = useState(false);
+    const [filterActiveDelegations, setFilterActiveDelegations] = useState(true);
+    const [delegationForm, setDelegationForm] = useState({
+        delegateeId: '',
+        startDate: new Date().toISOString().split('T')[0],
+        endDate: '',
+        scope: 'ALL',
+        reason: ''
+    });
 
     // Clock effect
     useEffect(() => {
@@ -239,6 +256,107 @@ const Team = () => {
             'ANNIVERSARY_LEAVE': 'ANL'
         };
         return map[leaveType] || leaveType;
+    };
+
+    const fetchDelegations = async () => {
+        try {
+            const [delRes, candRes] = await Promise.all([
+                delegationAPI.getMyDelegations(),
+                delegationAPI.getEligibleDelegates()
+            ]);
+            setMyDelegations(delRes.data || { assignedByMe: [], delegatedToMe: [] });
+            setEligibleDelegates(candRes.data || []);
+        } catch (err) {
+            console.warn("Could not fetch delegations:", err);
+        }
+    };
+
+    const handleCreateDelegation = async (e) => {
+        e.preventDefault();
+        if (!delegationForm.delegateeId) {
+            toast.error("Please select a manager or HR/CEO to delegate authority to");
+            return;
+        }
+        if (!delegationForm.startDate || !delegationForm.endDate) {
+            toast.error("Please select both start and end dates");
+            return;
+        }
+        const todayStr = new Date().toISOString().split('T')[0];
+        if (delegationForm.endDate < todayStr) {
+            toast.error("End date cannot be in the past");
+            return;
+        }
+        if (delegationForm.startDate > delegationForm.endDate) {
+            toast.error("Start date cannot be after end date");
+            return;
+        }
+
+        // Circular delegation check on client side: Check if delegatee currently has an active delegation to me
+        const currentScope = delegationForm.scope || 'ALL';
+        const circularActive = (myDelegations?.delegatedToMe || []).find(d => {
+            if (d.status !== 'ACTIVE') return false;
+            if (Number(d.delegatorId) !== Number(delegationForm.delegateeId)) return false;
+            const scopeOverlap = currentScope === 'ALL' || d.scope === 'ALL' || d.scope === currentScope;
+            if (!scopeOverlap) return false;
+            return delegationForm.startDate <= d.endDate && delegationForm.endDate >= d.startDate;
+        });
+
+        if (circularActive) {
+            toast.error(`Circular delegation blocked! ${circularActive.delegatorName || 'The selected peer'} already has an active delegation to you for overlapping dates (${circularActive.startDate} to ${circularActive.endDate}).`);
+            return;
+        }
+
+        // Check for overlapping active outgoing delegations
+        const overlappingActive = (myDelegations?.assignedByMe || []).find(d => {
+            if (d.status !== 'ACTIVE') return false;
+            const scopeOverlap = currentScope === 'ALL' || d.scope === 'ALL' || d.scope === currentScope;
+            if (!scopeOverlap) return false;
+            // Overlap condition: start <= d.endDate && end >= d.startDate
+            return delegationForm.startDate <= d.endDate && delegationForm.endDate >= d.startDate;
+        });
+
+        if (overlappingActive) {
+            toast.error(`Delegation date overlap! You already have an ACTIVE delegation (${overlappingActive.startDate} to ${overlappingActive.endDate}, Scope: ${overlappingActive.scope}). Please revoke it or pick non-overlapping dates.`);
+            return;
+        }
+
+        try {
+            setCreatingDelegation(true);
+            const res = await delegationAPI.createDelegation({
+                delegateeId: Number(delegationForm.delegateeId),
+                startDate: delegationForm.startDate,
+                endDate: delegationForm.endDate,
+                scope: currentScope,
+                reason: delegationForm.reason || ''
+            });
+            toast.success(res.data?.message || "Approval delegation created successfully!");
+            setShowDelegationModal(false);
+            setDelegationForm({
+                delegateeId: '',
+                startDate: new Date().toISOString().split('T')[0],
+                endDate: '',
+                scope: 'ALL',
+                reason: ''
+            });
+            fetchDelegations();
+            fetchTeamData();
+        } catch (err) {
+            toast.error(err.response?.data?.message || err.message || "Failed to create delegation");
+        } finally {
+            setCreatingDelegation(false);
+        }
+    };
+
+    const handleRevokeDelegation = async (id) => {
+        if (!window.confirm("Are you sure you want to revoke this approval delegation early?")) return;
+        try {
+            await delegationAPI.revokeDelegation(id);
+            toast.success("Delegation revoked successfully");
+            fetchDelegations();
+            fetchTeamData();
+        } catch (err) {
+            toast.error(err.response?.data?.message || "Failed to revoke delegation");
+        }
     };
 
     const fetchLeaveTypes = async () => {
@@ -831,7 +949,10 @@ const Team = () => {
                             } else {
                                 allLeaves = [];
                             }
-                            myTeamLeaves = allLeaves.filter(l => String(l.status || '').trim().toUpperCase() === 'PENDING');
+                            myTeamLeaves = allLeaves.filter(l => {
+                                const st = String(l.status || '').trim().toUpperCase();
+                                return st === 'PENDING' || st === 'SUBMITTED';
+                            });
                         } catch (adminErr) {
                             try {
                                 const pendingRes = await getPendingLeaveRequests();
@@ -841,7 +962,10 @@ const Team = () => {
                                 } else if (Array.isArray(pendingRes.data)) {
                                     allPendingLeaves = pendingRes.data;
                                 }
-                                myTeamLeaves = allPendingLeaves.filter(l => String(l.status || '').trim().toUpperCase() === 'PENDING');
+                                myTeamLeaves = allPendingLeaves.filter(l => {
+                                    const st = String(l.status || '').trim().toUpperCase();
+                                    return st === 'PENDING' || st === 'SUBMITTED';
+                                });
                             } catch (fallbackErr) {
                                 myTeamLeaves = [];
                             }
@@ -849,7 +973,33 @@ const Team = () => {
                     } else if (user?.employeeId) {
                         const leavesRes = await teamAPI.getTeamLeaveRequests(user.employeeId);
                         myTeamLeaves = Array.isArray(leavesRes.data) ? leavesRes.data : [];
-                        myTeamLeaves = myTeamLeaves.filter(l => String(l.status || '').trim().toUpperCase() === 'PENDING');
+                        myTeamLeaves = myTeamLeaves.filter(l => {
+                            const st = String(l.status || '').trim().toUpperCase();
+                            const mst = String(l.managerStatus || '').trim().toUpperCase();
+                            // Exclude if already decided or cancelled
+                            const nonPending = ['APPROVED', 'REJECTED', 'CANCELLED', 'CANCELED', 'ACCEPTED', 'SKIPPED', 'FORWARDED_TO_HR'];
+                            if (nonPending.includes(st) || nonPending.includes(mst)) return false;
+                            return st === 'PENDING' || st === 'SUBMITTED' || mst === 'PENDING' || mst === 'SUBMITTED';
+                        });
+                        
+                        // If direct team requests list is empty, also try getPendingLeaveRequests fallback
+                        if (myTeamLeaves.length === 0 && user?.id) {
+                            try {
+                                const pendingRes = await teamAPI.getPendingLeaveRequests(user.id);
+                                const pendingList = Array.isArray(pendingRes.data) ? pendingRes.data : (Array.isArray(pendingRes.data?.requests) ? pendingRes.data.requests : []);
+                                if (pendingList.length > 0) {
+                                    myTeamLeaves = pendingList.filter(l => {
+                                        const st = String(l.status || '').trim().toUpperCase();
+                                        const mst = String(l.managerStatus || '').trim().toUpperCase();
+                                        const nonPending = ['APPROVED', 'REJECTED', 'CANCELLED', 'CANCELED', 'ACCEPTED', 'SKIPPED', 'FORWARDED_TO_HR'];
+                                        if (nonPending.includes(st) || nonPending.includes(mst)) return false;
+                                        return st === 'PENDING' || st === 'SUBMITTED' || mst === 'PENDING' || mst === 'SUBMITTED';
+                                    });
+                                }
+                            } catch {
+                                // fallback ignored
+                            }
+                        }
                     }
                 } catch (err) {
                     myTeamLeaves = [];
@@ -947,15 +1097,55 @@ const Team = () => {
                 const blobColors = ['#e8f5a3', '#fce4ec', '#ffcdd2', '#bbdefb', '#c8e6c9', '#e1bee7'];
                 const getBlobColor = (index, leaveType = '') => {
                     const key = (leaveType || '').toLowerCase();
-                    if (key.includes('sick')) return '#e8f5a3';
-                    if (key.includes('casual')) return '#bbdefb';
-                    if (key.includes('remote') || key.includes('wfh')) return '#c8e6c9';
-                    if (key.includes('personal')) return '#fce4ec';
-                    if (key.includes('vacation') || key.includes('annual')) return '#e1bee7';
+                    if (key.includes('sick')) return '#fee2e2';
+                    if (key.includes('casual')) return '#e0e7ff';
+                    if (key.includes('remote') || key.includes('wfh')) return '#dcfce7';
+                    if (key.includes('personal')) return '#fef3c7';
+                    if (key.includes('vacation') || key.includes('annual')) return '#f3e8ff';
                     return blobColors[index % blobColors.length];
                 };
-                let outToday = [];
+
+                const parseDateObj = (val) => {
+                    if (!val) return null;
+                    if (Array.isArray(val)) return new Date(val[0], val[1] - 1, val[2]);
+                    if (typeof val === 'string' && val.includes('-')) {
+                        const p = val.split('T')[0].split('-');
+                        if (p[0].length === 4) return new Date(p[0], p[1] - 1, p[2]);
+                        if (p[2] && p[2].length === 4) return new Date(p[2], p[1] - 1, p[0]);
+                    }
+                    const d = new Date(val);
+                    return isNaN(d.getTime()) ? null : d;
+                };
+
+                const formatCardDates = (sDate, eDate, todayObj) => {
+                    if (!sDate && !eDate) return { label: 'Scheduled', isToday: false, isUpcoming: false };
+                    const start = sDate || eDate;
+                    const end = eDate || sDate;
+                    
+                    const isToday = todayObj >= start && todayObj <= end;
+                    const isUpcoming = start > todayObj;
+                    
+                    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                    const fmt = (d) => `${monthNames[d.getMonth()]} ${d.getDate()}`;
+                    
+                    let dateText = '';
+                    if (start.getTime() === end.getTime()) {
+                        dateText = isToday ? 'Today' : fmt(start);
+                    } else {
+                        if (isToday) {
+                            dateText = `Today - ${fmt(end)}`;
+                        } else {
+                            dateText = `${fmt(start)} - ${fmt(end)}`;
+                        }
+                    }
+                    return { label: dateText, isToday, isUpcoming };
+                };
+
+                let outList = [];
                 try {
+                    const todayDate = new Date();
+                    todayDate.setHours(0, 0, 0, 0);
+
                     let leaveList = [];
                     if (isOrgView) {
                         const res = await getAcceptedLeaveRequests();
@@ -977,43 +1167,111 @@ const Team = () => {
                             leaveList = Array.isArray(fd) ? fd : (fd?.content || []);
                         }
                     }
+
                     const approved = leaveList.filter(r => ['APPROVED', 'ACCEPTED'].includes((r.status || '').toUpperCase()));
-                    outToday = approved
-                        .filter(r => isDateInRange(todayStr, r.startDate || r.date || r.from, r.endDate || r.date || r.to))
+                    const leavesTodayAndUpcoming = approved
                         .map((r, i) => {
+                            const s = parseDateObj(r.startDate || r.date || r.from);
+                            const e = parseDateObj(r.endDate || r.date || r.to) || s;
+                            if (s) s.setHours(0, 0, 0, 0);
+                            if (e) e.setHours(0, 0, 0, 0);
+                            if (!s && !e) return null;
+                            const effectiveEnd = e || s;
+                            // Keep today or upcoming
+                            if (effectiveEnd < todayDate) return null;
+
                             const name = r.employeeName || [r.firstName, r.lastName].filter(Boolean).join(' ') || r.employeeId || 'Employee';
                             const leaveType = r.leaveTypeName || r.leaveType || 'Leave';
-                            const label = isWfhCode(leaveType) || String(leaveType).toLowerCase().includes('remote')
-                              ? 'Work From Home'
-                              : formatLeaveTypeLabel(leaveType);
-                            return { name, role: label, avatar: r.profilePhoto || null, employeeId: r.employeeId || null, blobColor: getBlobColor(i, leaveType), blobStyle: {} };
-                        });
+                            const isRemote = isWfhCode(leaveType) || String(leaveType).toLowerCase().includes('remote');
+                            let label = 'Work From Home';
+                            if (!isRemote) {
+                                const formatted = formatLeaveTypeLabel(leaveType);
+                                const rawUpper = String(leaveType).toUpperCase();
+                                if (formatted.toLowerCase().includes('leave')) {
+                                    label = formatted;
+                                } else if (['AL', 'SL', 'CL', 'PL', 'EL', 'ML'].includes(rawUpper)) {
+                                    label = `Leave (${rawUpper})`;
+                                } else {
+                                    label = `${formatted} Leave`;
+                                }
+                            }
+                            const dateInfo = formatCardDates(s, e, todayDate);
+
+                            return {
+                                name,
+                                role: label,
+                                avatar: r.profilePhoto || null,
+                                employeeId: r.employeeId || null,
+                                blobColor: getBlobColor(i, leaveType),
+                                startDate: s,
+                                endDate: e,
+                                dateText: dateInfo.label,
+                                isToday: dateInfo.isToday,
+                                isUpcoming: dateInfo.isUpcoming,
+                                type: isRemote ? 'WFH' : 'LEAVE'
+                            };
+                        })
+                        .filter(Boolean);
+
                     let wfhList = [];
                     try {
-                        const wfhRes = (isOrgView || isAdminUser) ? await wfhAPI.getAccepted() : (user?.employeeId ? await wfhAPI.getTeamOut(todayStr) : []);
+                        // For WFH history and upcoming:
+                        const wfhRes = (isOrgView || isAdminUser) ? await wfhAPI.getAccepted() : (user?.employeeId ? await wfhAPI.getManagerHistory() : []);
                         const wd = wfhRes?.data || wfhRes;
                         wfhList = Array.isArray(wd) ? wd : (wd?.requests || wd?.content || []);
                         
                         if (wfhList.length === 0 && user?.employeeId) {
-                            const histRes = await wfhAPI.getManagerHistory();
-                            const hd = histRes?.data || histRes;
-                            wfhList = Array.isArray(hd) ? hd : (hd?.content || hd?.requests || []);
+                            const altWfh = await wfhAPI.getTeamOut(todayStr);
+                            const ad = altWfh?.data || altWfh;
+                            wfhList = Array.isArray(ad) ? ad : (ad?.requests || ad?.content || []);
                         }
                     } catch (e) {
                         const fb = user?.employeeId ? await wfhAPI.getManagerHistory() : [];
                         const fbd = fb?.data || fb;
                         wfhList = Array.isArray(fbd) ? fbd : (fbd?.content || fbd?.requests || []);
                     }
-                    const wfhToday = wfhList
-                        .filter(w => ['APPROVED', 'ACCEPTED'].includes((w.status || '').toUpperCase()) && isDateInRange(todayStr, w.startDate || w.date || w.wfhDate || w.from, w.endDate || w.date || w.wfhDate || w.to))
-                        .map((w, i) => ({ name: w.employeeName || w.employeeCode || w.employeeId || 'Employee', role: 'Work From Home', avatar: null, employeeId: w.employeeCode || w.employeeId || null, blobColor: getBlobColor(outToday.length + i, 'wfh'), blobStyle: {} }));
-                    outToday = [...outToday, ...wfhToday];
+
+                    const wfhTodayAndUpcoming = wfhList
+                        .filter(w => ['APPROVED', 'ACCEPTED'].includes((w.status || '').toUpperCase()))
+                        .map((w, i) => {
+                            const s = parseDateObj(w.startDate || w.date || w.wfhDate || w.from);
+                            const e = parseDateObj(w.endDate || w.date || w.wfhDate || w.to) || s;
+                            if (s) s.setHours(0, 0, 0, 0);
+                            if (e) e.setHours(0, 0, 0, 0);
+                            if (!s && !e) return null;
+                            const effectiveEnd = e || s;
+                            // Keep today or upcoming
+                            if (effectiveEnd < todayDate) return null;
+
+                            const dateInfo = formatCardDates(s, e, todayDate);
+                            return {
+                                name: w.employeeName || w.employeeCode || w.employeeId || 'Employee',
+                                role: 'Work From Home',
+                                avatar: null,
+                                employeeId: w.employeeCode || w.employeeId || null,
+                                blobColor: getBlobColor(leavesTodayAndUpcoming.length + i, 'wfh'),
+                                startDate: s,
+                                endDate: e,
+                                dateText: dateInfo.label,
+                                isToday: dateInfo.isToday,
+                                isUpcoming: dateInfo.isUpcoming,
+                                type: 'WFH'
+                            };
+                        })
+                        .filter(Boolean);
+
+                    // Combine and sort chronologically (earliest startDate first)
+                    outList = [...leavesTodayAndUpcoming, ...wfhTodayAndUpcoming].sort((a, b) => {
+                        const aTime = a.startDate ? a.startDate.getTime() : 0;
+                        const bTime = b.startDate ? b.startDate.getTime() : 0;
+                        return aTime - bTime;
+                    });
                     
                 } catch (e) {
                     console.error("Error fetching outToday:", e);
-                    outToday = [];
+                    outList = [];
                 }
-                return outToday;
+                return outList;
             })();
 
             const [
@@ -1233,6 +1491,13 @@ const Team = () => {
             const roleLabel = isHR ? 'HR' : (isAdminUser ? 'Admin' : 'Manager');
             const responseMessage = comment || `${status} by ${approverName} (${roleLabel})`;
 
+            if (status === 'DIRECT_TO_HR' || status === 'FORWARD_TO_HR') {
+                await teamAPI.directLeaveRequestToHr(leaveId, user?.id, responseMessage);
+                toast.success('Leave request redirected to HR successfully');
+                fetchTeamData();
+                return;
+            }
+
             if (isAdminUser) {
                 if (status === 'APPROVED') await teamAPI.approveAdminLeaveRequest(leaveId, responseMessage);
                 else if (status === 'REJECTED') await teamAPI.rejectAdminLeaveRequest(leaveId, responseMessage);
@@ -1245,7 +1510,7 @@ const Team = () => {
             toast.success(`Leave request ${status.toLowerCase()}`);
             fetchTeamData();
         } catch (error) {
-            toast.error(`Failed to ${status.toLowerCase()} leave: ${error.response?.data?.message || error.message}`);
+            toast.error(`Failed to ${status === 'DIRECT_TO_HR' ? 'redirect to HR' : status.toLowerCase()} leave: ${error.response?.data?.message || error.message}`);
         } finally {
             setSubmittingAction({ id: null, action: null });
         }
@@ -1332,7 +1597,9 @@ const Team = () => {
         const comment = decisionComment.trim();
 
         try {
-            if (decisionAction === 'APPROVE') {
+            if (decisionAction === 'DIRECT_TO_HR') {
+                if (req.reqType === 'LEAVE') await handleLeaveResponse(id, 'DIRECT_TO_HR', comment || 'Forwarded directly to HR by manager');
+            } else if (decisionAction === 'APPROVE') {
                 if (req.reqType === 'LEAVE') await handleLeaveResponse(id, 'APPROVED', comment);
                 else if (req.reqType === 'WFH') await handleWfhResponse(id, 'APPROVED', comment);
                 else if (req.reqType === 'EXPENSE') await handleExpenseApprove(id);
@@ -2319,12 +2586,13 @@ const Team = () => {
                         box-shadow: none;
                     }
                     
-                    .adj-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; margin-bottom: 14px; padding: 0 4px; }
+                    .adj-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 14px; margin-bottom: 14px; padding: 0 4px; }
                     
                     .adj-card { 
                         background: #fff; border: 1px solid #f1f5f9; border-radius: 10px; 
                         padding: 14px 16px; box-shadow: none; transition: all 0.2s ease;
                         display: flex; flex-direction: column; gap: 12px; position: relative;
+                        overflow: hidden;
                     }
                     .adj-card:hover { transform: none; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border-color: #e2e8f0; }
                     
@@ -2343,13 +2611,14 @@ const Team = () => {
                         background: #f0fdf4; color: #16a34a; border: 1px solid #dcfce7;
                     }
                     
-                    .adj-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+                    .adj-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
                     .adj-stat-box { 
-                        background: #f8fafc; border-radius: 8px; padding: 10px 4px; text-align: center; 
+                        background: #f8fafc; border-radius: 8px; padding: 8px 4px; text-align: center; 
                         display: flex; flex-direction: column; gap: 4px; border: 1px solid #f1f5f9;
+                        min-width: 0;
                     }
-                    .adj-stat-val { font-size: 16px; font-weight: 800; font-family: monospace; line-height: 1; }
-                    .adj-stat-lbl { font-size: 9px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; }
+                    .adj-stat-val { font-size: 15px; font-weight: 800; font-family: monospace; line-height: 1; }
+                    .adj-stat-lbl { font-size: 9px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.02em; white-space: normal; line-height: 1.2; word-break: break-word; }
                     
                     .adj-btn-full { 
                         width: 100%; padding: 0 12px; height: 36px; border-radius: 8px; font-size: 13px; font-weight: 700; 
@@ -2387,9 +2656,9 @@ const Team = () => {
                         onClick={() => { setActiveTab('approvals'); fetchTeamData(); }}
                     >
                         Leave, WFH & Expense Approvals
-                        {(pendingLeaves.length + pendingWfh.length + pendingExpenses.length) > 0 && (
+                        {(pendingLeaves.length + pendingWfh.length + pendingExpenses.length + pendingExitRequests.length) > 0 && (
                             <span className="mp-tab-badge">
-                                {pendingLeaves.length + pendingWfh.length + pendingExpenses.length}
+                                {pendingLeaves.length + pendingWfh.length + pendingExpenses.length + pendingExitRequests.length}
                             </span>
                         )}
                     </button>
@@ -2444,6 +2713,20 @@ const Team = () => {
                     >
                         Leave Adjustments
                     </button>
+                    <button
+                        type="button"
+                        role="tab"
+                        aria-selected={activeTab === 'delegations'}
+                        className={`mp-tab ${activeTab === 'delegations' ? 'active' : ''}`}
+                        onClick={() => { setActiveTab('delegations'); fetchDelegations(); }}
+                    >
+                        Approval Delegation
+                        {myDelegations?.assignedByMe?.filter(d => d.status === 'ACTIVE').length > 0 && (
+                            <span className="mp-tab-badge" style={{ background: '#4f46e5' }}>
+                                {myDelegations.assignedByMe.filter(d => d.status === 'ACTIVE').length}
+                            </span>
+                        )}
+                    </button>
                 </div>
                 <p className="mp-tabs-hint">Swipe left or right to see all tabs</p>
 
@@ -2471,26 +2754,110 @@ const Team = () => {
                                 );
                             })}
                         </div>
-                        {/* Who's Out Today - separate section */}
-                        <div className="card mp-card-inset" style={{ marginBottom: 0, padding: '14px 16px' }}>
-                            <div className="card-header" style={{ padding: 0, marginBottom: '1rem' }}>
-                                <h3 className="card-title">Who's Out Today</h3>
+                        {/* Who's Out & Remote (Today & Upcoming) - section */}
+                        <div className="card mp-card-inset" style={{ marginBottom: 0, padding: '16px 20px', borderRadius: '12px' }}>
+                            <div className="card-header" style={{ padding: 0, marginBottom: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <h3 className="card-title" style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#1e293b' }}>
+                                        {isOrgView ? "Org Out & Remote Schedule" : "Who's Out & Remote Schedule"}
+                                    </h3>
+                                    <span style={{ fontSize: '0.72rem', background: '#f1f5f9', color: '#64748b', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
+                                        Today & Upcoming
+                                    </span>
+                                </div>
+                                {whosOutToday.length > 0 && (
+                                    <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500 }}>
+                                        {whosOutToday.length} {whosOutToday.length === 1 ? 'person' : 'people'}
+                                    </span>
+                                )}
                             </div>
                             <div className="card-body" style={{ padding: 0 }}>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.25rem', justifyContent: 'flex-start', alignItems: 'flex-start' }}>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.25rem', justifyContent: 'flex-start', alignItems: 'stretch' }}>
                                     {whosOutToday.length === 0 ? (
-                                        <p style={{ color: 'var(--gray-500)', margin: 0, fontSize: '14px' }}>No one out today</p>
+                                        <p style={{ color: 'var(--gray-500)', margin: 0, fontSize: '14px' }}>No upcoming leaves or remote work scheduled</p>
                                     ) : (
                                         whosOutToday.map((person, idx) => (
-                                            <div key={`${person.name}-${idx}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', minWidth: '72px', maxWidth: '90px' }}>
-                                                <div style={{ position: 'relative', width: 60, height: 60, marginBottom: 8 }}>
+                                            <div
+                                                key={`${person.name}-${person.employeeId || idx}-${person.dateText || ''}`}
+                                                style={{
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    alignItems: 'center',
+                                                    textAlign: 'center',
+                                                    width: '118px',
+                                                    minWidth: '110px',
+                                                    padding: '10px 8px 8px',
+                                                    background: '#ffffff',
+                                                    border: '1px solid #f1f5f9',
+                                                    borderRadius: '10px',
+                                                    boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                                                    transition: 'all 0.15s ease'
+                                                }}
+                                            >
+                                                <div style={{ position: 'relative', width: 52, height: 52, marginBottom: 8 }}>
                                                     <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', backgroundColor: person.blobColor || '#e2e8f0', opacity: 0.9 }} />
-                                                    <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 44, height: 44, background: '#e2e8f0', color: '#64748b', fontSize: '0.8rem', fontWeight: 600, border: '2px solid #fff', boxShadow: '0 2px 6px rgba(0,0,0,0.08)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                        {person.avatar ? <img src={person.avatar} alt={person.name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : <span>{String(person.name).split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}</span>}
+                                                    <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 42, height: 42, background: '#f8fafc', color: '#334155', fontSize: '0.78rem', fontWeight: 700, border: '2px solid #fff', boxShadow: '0 2px 5px rgba(0,0,0,0.06)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                        {person.avatar ? (
+                                                            <img src={person.avatar} alt={person.name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                                                        ) : (
+                                                            <span>{String(person.name).split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}</span>
+                                                        )}
                                                     </div>
                                                 </div>
-                                                <p style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.72rem', lineHeight: 1.3, margin: '0 0 1px' }}>{person.name}</p>
-                                                <p style={{ fontSize: '0.65rem', color: '#94a3b8', lineHeight: 1.2, margin: 0 }}>{person.role}</p>
+                                                <p
+                                                    style={{
+                                                        fontWeight: 600,
+                                                        color: '#1e293b',
+                                                        fontSize: '0.74rem',
+                                                        lineHeight: 1.25,
+                                                        margin: '0 0 2px',
+                                                        width: '100%',
+                                                        whiteSpace: 'nowrap',
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis'
+                                                    }}
+                                                    title={person.name}
+                                                >
+                                                    {person.name}
+                                                </p>
+                                                <p
+                                                    style={{
+                                                        fontSize: '0.65rem',
+                                                        color: '#64748b',
+                                                        lineHeight: 1.2,
+                                                        margin: '0 0 4px',
+                                                        fontWeight: 500,
+                                                        width: '100%',
+                                                        whiteSpace: 'nowrap',
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis'
+                                                    }}
+                                                    title={person.role}
+                                                >
+                                                    {person.role}
+                                                </p>
+                                                <div style={{ marginTop: 'auto', paddingTop: '4px', width: '100%' }}>
+                                                    <span
+                                                        style={{
+                                                            display: 'inline-block',
+                                                            fontSize: '0.62rem',
+                                                            fontWeight: 600,
+                                                            padding: '2px 6px',
+                                                            borderRadius: '6px',
+                                                            background: person.isToday ? '#fee2e2' : '#eff6ff',
+                                                            color: person.isToday ? '#b91c1c' : '#1d4ed8',
+                                                            width: '100%',
+                                                            boxSizing: 'border-box',
+                                                            textAlign: 'center',
+                                                            whiteSpace: 'nowrap',
+                                                            overflow: 'hidden',
+                                                            textOverflow: 'ellipsis'
+                                                        }}
+                                                        title={person.dateText}
+                                                    >
+                                                        {person.dateText || (person.isToday ? 'Today' : 'Upcoming')}
+                                                    </span>
+                                                </div>
                                             </div>
                                         ))
                                     )}
@@ -2849,12 +3216,38 @@ const Team = () => {
                 })()}
 
                 {activeTab === 'approvals' && (() => {
+                    const nonPendingStatuses = ['APPROVED', 'ACCEPTED', 'REJECTED', 'CANCELLED', 'CANCELED', 'SKIPPED', 'FORWARDED_TO_HR'];
                     const allPending = [
-                        ...pendingLeaves.map(l => ({ ...l, reqType: 'LEAVE' })),
-                        ...pendingWfh.map(w => ({ ...w, reqType: 'WFH' })),
-                        ...pendingExpenses.map(e => ({ ...e, reqType: 'EXPENSE' })),
-                        ...pendingExitRequests.map(x => ({ ...x, reqType: 'EXIT' }))
-                    ].sort((a, b) => new Date(b.createdAt || b.submittedAt) - new Date(a.createdAt || a.submittedAt));
+                        ...pendingLeaves.filter(l => {
+                            const mst = String(l.managerStatus || '').trim().toUpperCase();
+                            const st = String(l.status || '').trim().toUpperCase();
+                            if (nonPendingStatuses.includes(st) || nonPendingStatuses.includes(mst)) return false;
+                            return st === 'PENDING' || st === 'SUBMITTED' || mst === 'PENDING' || mst === 'SUBMITTED';
+                        }).map(l => {
+                            const rawType = String(l.leaveType || l.leaveTypeName || l.leaveTypeCode || '').toUpperCase();
+                            const isWfh = isWfhCode(l.leaveType || l.leaveTypeName || l.leaveTypeCode) || 
+                                          rawType === 'WFH' || 
+                                          rawType.includes('WORK_FROM_HOME') ||
+                                          rawType.includes('WORK FROM HOME') ||
+                                          rawType.includes('REMOTE') ||
+                                          String(l.type || '').toUpperCase() === 'WFH' ||
+                                          Boolean(l.isWfh);
+                            return { ...l, reqType: isWfh ? 'WFH' : 'LEAVE' };
+                        }),
+                        ...pendingWfh.filter(w => {
+                            const st = String(w.status || '').trim().toUpperCase();
+                            return !nonPendingStatuses.includes(st) && (st === 'PENDING' || st === 'SUBMITTED');
+                        }).map(w => ({ ...w, reqType: 'WFH' })),
+                        ...pendingExpenses.filter(e => {
+                            const t = String(e.reqType || e.type || '').toUpperCase();
+                            const st = String(e.status || '').trim().toUpperCase();
+                            return t !== 'WFH' && t !== 'LEAVE' && !nonPendingStatuses.includes(st) && (st === 'SUBMITTED' || st === 'PENDING');
+                        }).map(e => ({ ...e, reqType: 'EXPENSE' })),
+                        ...pendingExitRequests.filter(x => {
+                            const st = String(x.status || '').trim().toUpperCase();
+                            return !nonPendingStatuses.includes(st) && (st === 'PENDING' || st === 'SUBMITTED');
+                        }).map(x => ({ ...x, reqType: 'EXIT' }))
+                    ].sort((a, b) => new Date(b.createdAt || b.submittedAt || 0) - new Date(a.createdAt || a.submittedAt || 0));
 
                     const handleExportApprovals = () => {
                         if (!allPending || allPending.length === 0) {
@@ -2885,41 +3278,115 @@ const Team = () => {
                         toast.success("Approvals exported to CSV");
                     };
 
-                    const filtered = (approvalFilter === 'all' || approvalFilter === 'pending')
+                    const normApprovalFilter = (approvalFilter || 'all').toLowerCase().trim();
+                    const byType = (normApprovalFilter === 'all' || normApprovalFilter === 'pending')
                         ? allPending 
-                        : allPending.filter(r => r.reqType === approvalFilter.toUpperCase());
+                        : allPending.filter(r => (r.reqType || '').toLowerCase() === normApprovalFilter);
+
+                    const filtered = byType.filter(r => {
+                        if (approvalSourceFilter === 'delegated') return Boolean(r.isDelegated);
+                        if (approvalSourceFilter === 'direct') return !r.isDelegated;
+                        return true;
+                    });
 
                     return (
                         <div className="card mp-card-inset" style={{ padding: '16px 20px', border: '1px solid rgba(0,0,0,0.06)', borderRadius: '10px', background: '#fff' }}>
                             <div className="approvals-header" style={{ paddingBottom: '14px', borderBottom: '1px solid #f1f5f9', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
                                 <div className="approvals-title-group">
                                     <h2 className="approvals-title" style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a', margin: '0 0 2px' }}>Leave, WFH & Expense Approvals</h2>
-                                    <p className="approvals-sub" style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>Review and act on pending requests from your team</p>
+                                    <p className="approvals-sub" style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>Review and act on pending requests from your direct team and delegated managers</p>
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                    <div className="filters-strip" style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: 0, padding: 0 }}>
-                                        {['All Requests', 'Leave', 'WFH', 'Expense', 'Exit'].map(f => (
-                                            <div 
-                                                key={f} 
-                                                className={`chip-filter ${approvalFilter === f.toLowerCase().replace(' requests', '') ? 'active' : ''}`}
-                                                onClick={() => setApprovalFilter(f.toLowerCase().replace(' requests', ''))}
-                                                style={{ height: '30px', padding: '0 10px', fontSize: '12px' }}
-                                            >
-                                                {f} {approvalFilter === f.toLowerCase().replace(' requests', '') && (
-                                                    <span style={{ marginLeft: '4px', fontSize: '10px', opacity: 0.8 }}>({filtered.length})</span>
-                                                )}
-                                            </div>
-                                        ))}
-                                        <div 
-                                            className={`chip-filter ${approvalFilter === 'pending' ? 'active' : ''}`} 
-                                            onClick={() => setApprovalFilter('pending')}
-                                            style={{ height: '30px', padding: '0 10px', fontSize: '12px' }}
-                                        >
-                                            Pending
-                                        </div>
-                                    </div>
-                                    <button className="btn" onClick={handleExportApprovals} style={{ height: '30px', padding: '0 12px', fontSize: '12px' }}>Export</button>
-                                </div>
+                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                     <div className="filters-strip" style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: 0, padding: 0 }}>
+                                         {[
+                                             { label: 'All Requests', val: 'all', count: allPending.length },
+                                             { label: 'Leave', val: 'leave', count: allPending.filter(r => (r.reqType || '').toUpperCase() === 'LEAVE').length },
+                                             { label: 'WFH', val: 'wfh', count: allPending.filter(r => (r.reqType || '').toUpperCase() === 'WFH').length },
+                                             { label: 'Expense', val: 'expense', count: allPending.filter(r => (r.reqType || '').toUpperCase() === 'EXPENSE').length },
+                                             { label: 'Exit', val: 'exit', count: allPending.filter(r => (r.reqType || '').toUpperCase() === 'EXIT').length }
+                                         ].map(f => {
+                                             const isActive = (approvalFilter || 'all').toLowerCase() === f.val.toLowerCase();
+                                             return (
+                                                 <button 
+                                                     type="button"
+                                                     key={f.val} 
+                                                     className={`chip-filter ${isActive ? 'active' : ''}`}
+                                                     onClick={(e) => {
+                                                         e.stopPropagation();
+                                                         setApprovalFilter(f.val);
+                                                     }}
+                                                     style={{ 
+                                                         height: '30px', 
+                                                         padding: '0 12px', 
+                                                         fontSize: '12px', 
+                                                         cursor: 'pointer',
+                                                         background: isActive ? '#1a4ff0' : '#fff',
+                                                         color: isActive ? '#fff' : '#64748b',
+                                                         borderColor: isActive ? '#1a4ff0' : '#e2e8f0',
+                                                         fontWeight: isActive ? 700 : 500,
+                                                         outline: 'none',
+                                                         display: 'inline-flex',
+                                                         alignItems: 'center'
+                                                     }}
+                                                 >
+                                                     {f.label}
+                                                     {f.count > 0 && (
+                                                         <span style={{ 
+                                                             marginLeft: '6px', 
+                                                             fontSize: '11px', 
+                                                             fontWeight: 700,
+                                                             padding: '1px 6px',
+                                                             borderRadius: '10px',
+                                                             background: isActive ? 'rgba(255,255,255,0.25)' : '#e2e8f0',
+                                                             color: isActive ? '#fff' : '#475569',
+                                                             pointerEvents: 'none'
+                                                         }}>
+                                                             {f.count}
+                                                         </span>
+                                                     )}
+                                                 </button>
+                                             );
+                                         })}
+                                     </div>
+                                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#f8fafc', padding: '2px 4px', borderRadius: '8px', border: '1px solid #e2e8f0' }} title="Filter by Request Source (Direct Reportees vs Delegated from Peer Managers)">
+                                         <button
+                                             type="button"
+                                             className={`btn ${approvalSourceFilter === 'all' ? 'btn-primary' : 'btn-ghost'}`}
+                                             style={{ height: '26px', padding: '0 8px', fontSize: '11px', borderRadius: '6px' }}
+                                             onClick={() => setApprovalSourceFilter('all')}
+                                             title="View all requests (Direct Team + Delegated)"
+                                         >
+                                             All Sources
+                                             <span style={{ marginLeft: '4px', fontSize: '10px', opacity: 0.85 }}>({allPending.length})</span>
+                                         </button>
+                                         <button
+                                             type="button"
+                                             className={`btn ${approvalSourceFilter === 'direct' ? 'btn-primary' : 'btn-ghost'}`}
+                                             style={{ height: '26px', padding: '0 8px', fontSize: '11px', borderRadius: '6px' }}
+                                             onClick={() => setApprovalSourceFilter('direct')}
+                                             title="Only requests from employees directly reporting to you"
+                                         >
+                                             Direct Team
+                                             <span style={{ marginLeft: '4px', fontSize: '10px', opacity: 0.85 }}>({allPending.filter(r => !r.isDelegated).length})</span>
+                                         </button>
+                                         <button
+                                             type="button"
+                                             className={`btn ${approvalSourceFilter === 'delegated' ? 'btn-primary' : 'btn-ghost'}`}
+                                             style={{ height: '26px', padding: '0 8px', fontSize: '11px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                             onClick={() => setApprovalSourceFilter('delegated')}
+                                             title="Requests delegated from other managers to you"
+                                         >
+                                             <Shield size={12} color={approvalSourceFilter === 'delegated' ? '#fff' : '#6366f1'} />
+                                             Delegated
+                                             {allPending.filter(r => r.isDelegated).length > 0 && (
+                                                 <span style={{ fontSize: '10px', background: approvalSourceFilter === 'delegated' ? 'rgba(255,255,255,0.3)' : '#6366f1', color: '#fff', borderRadius: '10px', padding: '1px 5px' }}>
+                                                     {allPending.filter(r => r.isDelegated).length}
+                                                 </span>
+                                             )}
+                                         </button>
+                                     </div>
+                                     <button className="btn" onClick={handleExportApprovals} style={{ height: '30px', padding: '0 12px', fontSize: '12px' }}>Export</button>
+                                 </div>
                             </div>
 
                             {(loading && allPending.length === 0) ? (
@@ -2961,8 +3428,27 @@ const Team = () => {
                                         const color = rowColors[idx % rowColors.length];
                                         
                                         return (
-                                            <div className="request-card" key={req.id || idx}>
-                                                <div className={`rc-type-badge type-${req.reqType.toLowerCase()}`}>{req.reqType}</div>
+                                            <div className="request-card" key={`${req.reqType}-${req.id || idx}`}>
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                                    <div className={`rc-type-badge type-${(req.reqType || 'leave').toLowerCase()}`}>{req.reqType}</div>
+                                                    {req.isDelegated && (
+                                                        <span style={{ 
+                                                            display: 'inline-flex', 
+                                                            alignItems: 'center', 
+                                                            gap: '4px', 
+                                                            fontSize: '11px', 
+                                                            fontWeight: 600, 
+                                                            color: '#4338ca', 
+                                                            background: '#e0e7ff', 
+                                                            padding: '2px 8px', 
+                                                            borderRadius: '12px',
+                                                            border: '1px solid #c7d2fe'
+                                                        }}>
+                                                            <Shield size={12} color="#4338ca" />
+                                                            Delegated from {req.delegatedFrom || 'Manager'}
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <div className="rc-header">
                                                     <div className="u-av" style={{ background: `${color}15`, color: color, width: '40px', height: '40px', fontSize: '13px' }}>
                                                         {initials}
@@ -2991,24 +3477,47 @@ const Team = () => {
                                                         {(() => {
                                                             const reqStatus = (req.reqType === 'LEAVE' ? (isOrgView ? (req.status || 'PENDING') : (req.managerStatus || 'PENDING')) : (req.status || 'PENDING')).toUpperCase();
                                                             const isPending = reqStatus === 'PENDING' || reqStatus === 'SUBMITTED';
+                                                            const isApproved = reqStatus === 'APPROVED' || reqStatus === 'ACCEPTED' || reqStatus.includes('APPROV');
+                                                            const isSkipped = reqStatus === 'SKIPPED';
                                                             return (
                                                                 <span className="stat-badge" style={{ 
-                                                                    background: isPending ? '#fef3c7' : (reqStatus === 'APPROVED' || reqStatus === 'ACCEPTED' || reqStatus.includes('APPROV')) ? '#dcfce7' : '#fee2e2',
-                                                                    color: isPending ? '#92400e' : (reqStatus === 'APPROVED' || reqStatus === 'ACCEPTED' || reqStatus.includes('APPROV')) ? '#166534' : '#991b1b',
+                                                                    background: isSkipped ? '#eff6ff' : isPending ? '#fef3c7' : isApproved ? '#dcfce7' : '#fee2e2',
+                                                                    color: isSkipped ? '#1d4ed8' : isPending ? '#92400e' : isApproved ? '#166534' : '#991b1b',
                                                                     fontSize: '10px'
                                                                 }}>
-                                                                    {reqStatus}
+                                                                    {isSkipped ? 'FORWARDED TO HR' : reqStatus}
                                                                 </span>
                                                             );
                                                         })()}
                                                     </div>
                                                 </div>
 
-                                                <div className="rc-actions">
+                                                <div className="rc-actions" style={{ justifyContent: 'flex-end' }}>
                                                     {(() => {
                                                         const reqStatus = (req.reqType === 'LEAVE' ? (isOrgView ? (req.status || 'PENDING') : (req.managerStatus || 'PENDING')) : (req.status || 'PENDING')).toUpperCase();
                                                         const isPending = reqStatus === 'PENDING' || reqStatus === 'SUBMITTED';
+                                                        const reqEmpId = String(req.employeeId || req.employee?.employeeId || '').trim().toLowerCase();
+                                                        const currentEmpId = String(user?.employeeId || '').trim().toLowerCase();
+                                                        const isSelfRequest = Boolean(currentEmpId && reqEmpId && currentEmpId === reqEmpId);
+
                                                         if (isPending) {
+                                                            if (isSelfRequest) {
+                                                                return (
+                                                                    <span style={{ 
+                                                                        fontSize: '11px', 
+                                                                        color: '#64748b', 
+                                                                        background: '#f1f5f9', 
+                                                                        padding: '4px 10px', 
+                                                                        borderRadius: '6px', 
+                                                                        fontWeight: 600,
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '4px'
+                                                                    }}>
+                                                                        Self Request (No Self-Approval)
+                                                                    </span>
+                                                                );
+                                                            }
                                                             return (
                                                                 <>
                                                                     <button 
@@ -3047,24 +3556,16 @@ const Team = () => {
                                                                     </button>
                                                                 </>
                                                             );
-                                                        } else {
-                                                            return (
-                                                                <span className="stat-badge" style={{ 
-                                                                    background: (reqStatus === 'APPROVED' || reqStatus === 'ACCEPTED' || reqStatus.includes('APPROV')) ? '#dcfce7' : '#fee2e2',
-                                                                    color: (reqStatus === 'APPROVED' || reqStatus === 'ACCEPTED' || reqStatus.includes('APPROV')) ? '#166534' : '#991b1b',
-                                                                    fontSize: '11px',
-                                                                    padding: '6px 12px',
-                                                                    borderRadius: '6px',
-                                                                    fontWeight: 700,
-                                                                    marginRight: 'auto'
-                                                                }}>
-                                                                    {reqStatus}
-                                                                </span>
-                                                            );
                                                         }
+                                                        return null;
                                                     })()}
                                                     <button 
                                                         className="btn-card btn-card-details"
+                                                        style={(() => {
+                                                            const reqStatus = (req.reqType === 'LEAVE' ? (isOrgView ? (req.status || 'PENDING') : (req.managerStatus || 'PENDING')) : (req.status || 'PENDING')).toUpperCase();
+                                                            const isPending = reqStatus === 'PENDING' || reqStatus === 'SUBMITTED';
+                                                            return isPending ? {} : { flex: 'none', minWidth: '90px' };
+                                                        })()}
                                                         onClick={() => {
                                                             if (req.reqType === 'LEAVE') { setSelectedLeave(req); setShowLeaveDetailModal(true); }
                                                             if (req.reqType === 'WFH') { setSelectedWfh(req); setShowWfhDetailModal(true); }
@@ -3247,6 +3748,201 @@ const Team = () => {
                                     )}
                                 </div>
                             )}
+                        </div>
+                    );
+                })()}
+
+                {activeTab === 'delegations' && (() => {
+                    const rawAssigned = myDelegations?.assignedByMe || [];
+                    const rawReceived = myDelegations?.delegatedToMe || [];
+
+                    const assigned = filterActiveDelegations 
+                        ? rawAssigned.filter(d => d.status === 'ACTIVE') 
+                        : rawAssigned;
+                    const received = filterActiveDelegations 
+                        ? rawReceived.filter(d => d.status === 'ACTIVE') 
+                        : rawReceived;
+
+                    return (
+                        <div className="card mp-card-inset" style={{ padding: '20px 24px', border: '1px solid rgba(0,0,0,0.06)', borderRadius: '12px', background: '#fff', animation: 'fadeIn 0.3s ease-out' }}>
+                            <div className="approvals-header" style={{ paddingBottom: '16px', borderBottom: '1px solid #f1f5f9', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                                <div className="approvals-title-group">
+                                    <h2 className="approvals-title" style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a', margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <Shield size={18} color="#4f46e5" />
+                                        Approval Delegation
+                                    </h2>
+                                    <p className="approvals-sub" style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
+                                        Temporarily delegate your approval authorities (Leave, WFH, Expense, Timesheet, Exit) to peer managers or team members while on leave or traveling.
+                                    </p>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#475569', cursor: 'pointer', background: '#f8fafc', padding: '6px 10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={filterActiveDelegations}
+                                            onChange={(e) => setFilterActiveDelegations(e.target.checked)}
+                                            style={{ cursor: 'pointer' }}
+                                        />
+                                        Active Rules Only
+                                    </label>
+                                    <button
+                                        type="button"
+                                        className="hr-btn-primary"
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '0 14px', height: '36px', borderRadius: '8px', fontSize: '13px', fontWeight: 600 }}
+                                        onClick={() => {
+                                            fetchDelegations();
+                                            setShowDelegationModal(true);
+                                        }}
+                                    >
+                                        <Plus size={16} />
+                                        + Add Delegation
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Section 1: Delegations Assigned by Me */}
+                            <div style={{ marginBottom: '32px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                                    <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b', margin: 0 }}>
+                                        My Outgoing Delegations (Authority I Delegated)
+                                    </h3>
+                                    <span style={{ fontSize: '12px', color: '#64748b', background: '#f1f5f9', padding: '2px 8px', borderRadius: '10px' }}>
+                                        {assigned.length} {filterActiveDelegations ? 'active' : ''} rule{assigned.length !== 1 ? 's' : ''}
+                                    </span>
+                                </div>
+
+                                {assigned.length === 0 ? (
+                                    <div style={{ padding: '32px', textAlign: 'center', background: '#f8fafc', borderRadius: '10px', border: '1px dashed #cbd5e1' }}>
+                                        <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>
+                                            You currently have no outgoing delegation rules. Click <strong>+ Add Delegation</strong> above to assign temporary approval rights.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+                                        {assigned.map((del) => {
+                                            const isActive = del.status === 'ACTIVE';
+                                            const isExpired = del.status === 'EXPIRED';
+                                            const isRevoked = del.status === 'REVOKED';
+
+                                            return (
+                                                <div key={del.id} style={{ 
+                                                    border: '1px solid #e2e8f0', 
+                                                    borderRadius: '10px', 
+                                                    padding: '16px', 
+                                                    background: isActive ? '#faf5ff' : '#ffffff',
+                                                    position: 'relative'
+                                                }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                                                        <div>
+                                                            <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>
+                                                                {del.delegateeName || del.delegateeEmployeeCode}
+                                                            </div>
+                                                            <div style={{ fontSize: '12px', color: '#64748b' }}>
+                                                                {del.delegateeEmployeeCode} {del.delegateeDesignation ? `• ${del.delegateeDesignation}` : ''}
+                                                            </div>
+                                                        </div>
+                                                        <span style={{ 
+                                                            fontSize: '11px', 
+                                                            fontWeight: 600, 
+                                                            padding: '2px 8px', 
+                                                            borderRadius: '12px',
+                                                            background: isActive ? '#dcfce7' : isRevoked ? '#fee2e2' : '#f1f5f9',
+                                                            color: isActive ? '#166534' : isRevoked ? '#991b1b' : '#64748b'
+                                                        }}>
+                                                            {del.status}
+                                                        </span>
+                                                    </div>
+
+                                                    <div style={{ fontSize: '12px', color: '#334155', display: 'flex', flexDirection: 'column', gap: '4px', margin: '12px 0' }}>
+                                                        <div><strong>Period:</strong> {del.startDate} to {del.endDate}</div>
+                                                        <div><strong>Scope:</strong> <span style={{ background: '#e0e7ff', color: '#4338ca', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>{del.scope}</span></div>
+                                                        {del.reason && <div><strong>Reason:</strong> {del.reason}</div>}
+                                                    </div>
+
+                                                    {isActive && (
+                                                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px', borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
+                                                            <button
+                                                                type="button"
+                                                                className="btn btn-outline-danger"
+                                                                style={{ height: '28px', padding: '0 10px', fontSize: '11px' }}
+                                                                onClick={() => handleRevokeDelegation(del.id)}
+                                                            >
+                                                                Revoke Early
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Section 2: Delegations Received by Me */}
+                            <div>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                                    <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b', margin: 0 }}>
+                                        Delegated to Me (Authority I Received from Peers)
+                                    </h3>
+                                    <span style={{ fontSize: '12px', color: '#64748b', background: '#f1f5f9', padding: '2px 8px', borderRadius: '10px' }}>
+                                        {received.length} {filterActiveDelegations ? 'active' : ''} rule{received.length !== 1 ? 's' : ''}
+                                    </span>
+                                </div>
+
+                                {received.length === 0 ? (
+                                    <div style={{ padding: '32px', textAlign: 'center', background: '#f8fafc', borderRadius: '10px', border: '1px dashed #cbd5e1' }}>
+                                        <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>
+                                            {filterActiveDelegations 
+                                                ? 'No peer manager has currently active delegated approval rights to you. Uncheck "Active Rules Only" to see history.' 
+                                                : 'No peer manager has delegated approval rights to you.'}
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+                                        {received.map((del) => (
+                                            <div key={del.id} style={{ 
+                                                border: '1px solid #e2e8f0', 
+                                                borderRadius: '10px', 
+                                                padding: '16px', 
+                                                background: del.status === 'ACTIVE' ? '#eff6ff' : '#ffffff' 
+                                            }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                                                    <div>
+                                                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>
+                                                            {del.delegatorName || del.delegatorEmployeeCode}
+                                                        </div>
+                                                        <div style={{ fontSize: '12px', color: '#64748b' }}>
+                                                            Manager {del.delegatorEmployeeCode} {del.delegatorDesignation ? `• ${del.delegatorDesignation}` : ''}
+                                                        </div>
+                                                    </div>
+                                                    <span style={{ 
+                                                        fontSize: '11px', 
+                                                        fontWeight: 600, 
+                                                        padding: '2px 8px', 
+                                                        borderRadius: '12px',
+                                                        background: del.status === 'ACTIVE' ? '#dcfce7' : '#f1f5f9',
+                                                        color: del.status === 'ACTIVE' ? '#166534' : '#64748b'
+                                                    }}>
+                                                        {del.status}
+                                                    </span>
+                                                </div>
+
+                                                <div style={{ fontSize: '12px', color: '#334155', display: 'flex', flexDirection: 'column', gap: '4px', margin: '12px 0' }}>
+                                                    <div><strong>Period:</strong> {del.startDate} to {del.endDate}</div>
+                                                    <div><strong>Scope:</strong> <span style={{ background: '#e0e7ff', color: '#4338ca', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>{del.scope}</span></div>
+                                                    {del.reason && <div><strong>Reason:</strong> {del.reason}</div>}
+                                                </div>
+
+                                                {del.status === 'ACTIVE' && (
+                                                    <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #e0e7ff', fontSize: '11px', color: '#1d4ed8' }}>
+                                                        🛡️ You have authority to review and approve their team's requests under the <strong>Approvals</strong> tab.
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     );
                 })()}
@@ -4291,27 +4987,30 @@ const Team = () => {
                         <div className="hr-modal-header" style={{ 
                             borderBottom: '1px solid #f1f5f9', 
                             padding: '20px 24px',
-                            background: decisionAction === 'APPROVE' ? '#f0fdf4' : '#fef2f2'
+                            background: decisionAction === 'DIRECT_TO_HR' ? '#fffbeb' : (decisionAction === 'APPROVE' ? '#f0fdf4' : '#fef2f2')
                         }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                 <div style={{ 
-                                    backgroundColor: decisionAction === 'APPROVE' ? '#dcfce7' : '#fee2e2', 
+                                    backgroundColor: decisionAction === 'DIRECT_TO_HR' ? '#fef3c7' : (decisionAction === 'APPROVE' ? '#dcfce7' : '#fee2e2'), 
                                     padding: '10px', 
                                     borderRadius: '12px',
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center'
                                 }}>
-                                    {decisionAction === 'APPROVE' ? 
-                                        <CheckCircle size={24} style={{ color: '#16a34a' }} /> : 
+                                    {decisionAction === 'DIRECT_TO_HR' ? (
+                                        <ArrowRight size={24} style={{ color: '#d97706' }} />
+                                    ) : decisionAction === 'APPROVE' ? (
+                                        <CheckCircle size={24} style={{ color: '#16a34a' }} />
+                                    ) : (
                                         <XCircle size={24} style={{ color: '#dc2626' }} />
-                                    }
+                                    )}
                                 </div>
                                 <div>
                                     <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>
-                                        {decisionAction === 'APPROVE' ? 'Approve Request' : 'Reject Request'}
+                                        {decisionAction === 'DIRECT_TO_HR' ? 'Redirect to HR' : (decisionAction === 'APPROVE' ? 'Approve Request' : 'Reject Request')}
                                     </h2>
-                                    <p style={{ margin: '2px 0 0', fontSize: '12px', color: decisionAction === 'APPROVE' ? '#166534' : '#991b1b', opacity: 0.8 }}>
+                                    <p style={{ margin: '2px 0 0', fontSize: '12px', color: decisionAction === 'DIRECT_TO_HR' ? '#b45309' : (decisionAction === 'APPROVE' ? '#166534' : '#991b1b'), opacity: 0.8 }}>
                                         Action for {activeRequest.reqType}
                                     </p>
                                 </div>
@@ -4323,21 +5022,25 @@ const Team = () => {
                         <div className="hr-modal-body" style={{ padding: '24px' }}>
                             <div style={{ marginBottom: '20px' }}>
                                 <p style={{ margin: 0, fontSize: '14px', color: '#475569', lineHeight: 1.5 }}>
-                                    You are about to <strong>{decisionAction.toLowerCase()}</strong> the {activeRequest.reqType.toLowerCase()} request for <strong>{activeRequest.employeeName || `${activeRequest.firstName} ${activeRequest.lastName}`}</strong>.
+                                    {decisionAction === 'DIRECT_TO_HR' ? (
+                                        <>You are about to <strong>forward directly to HR</strong> the {activeRequest.reqType?.toLowerCase()} request for <strong>{activeRequest.employeeName || `${activeRequest.firstName} ${activeRequest.lastName}`}</strong> without manager approval.</>
+                                    ) : (
+                                        <>You are about to <strong>{decisionAction.toLowerCase()}</strong> the {activeRequest.reqType?.toLowerCase()} request for <strong>{activeRequest.employeeName || `${activeRequest.firstName} ${activeRequest.lastName}`}</strong>.</>
+                                    )}
                                 </p>
                             </div>
                             
                             <div className="hr-form-group">
                                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', fontSize: '13px', fontWeight: 700, color: '#334155' }}>
                                     <MessageSquare size={14} />
-                                    {decisionAction === 'APPROVE' ? 'Approval Feedback (Optional)' : 'Rejection Reason (Mandatory)'}
+                                    {decisionAction === 'DIRECT_TO_HR' ? 'Forwarding Note (Optional)' : (decisionAction === 'APPROVE' ? 'Approval Feedback (Optional)' : 'Rejection Reason (Mandatory)')}
                                     {decisionAction === 'REJECT' && <span style={{ color: '#ef4444' }}>*</span>}
                                 </label>
                                 <textarea
                                     className="hr-time-textarea"
                                     value={decisionComment}
                                     onChange={(e) => setDecisionComment(e.target.value)}
-                                    placeholder={decisionAction === 'APPROVE' ? "Add a supportive message or notes..." : "Please explain why this request is being rejected..."}
+                                    placeholder={decisionAction === 'DIRECT_TO_HR' ? "Add note for HR..." : (decisionAction === 'APPROVE' ? "Add a supportive message or notes..." : "Please explain why this request is being rejected...")}
                                     rows={4}
                                     style={{ 
                                         width: '100%', 
@@ -4372,14 +5075,14 @@ const Team = () => {
                             <button
                                 className="hr-btn-primary"
                                 style={{ 
-                                    backgroundColor: decisionAction === 'APPROVE' ? '#22c55e' : '#ef4444',
+                                    backgroundColor: decisionAction === 'DIRECT_TO_HR' ? '#f59e0b' : (decisionAction === 'APPROVE' ? '#22c55e' : '#ef4444'),
                                     padding: '10px 24px', 
                                     borderRadius: '10px',
                                     fontWeight: 700,
                                     display: 'flex',
                                     alignItems: 'center',
                                     gap: '8px',
-                                    boxShadow: (submittingAction.id === activeRequest.id || (decisionAction === 'REJECT' && !decisionComment.trim())) ? 'none' : `0 4px 12px ${decisionAction === 'APPROVE' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`,
+                                    boxShadow: (submittingAction.id === activeRequest.id || (decisionAction === 'REJECT' && !decisionComment.trim())) ? 'none' : `0 4px 12px ${decisionAction === 'DIRECT_TO_HR' ? 'rgba(245, 158, 11, 0.2)' : (decisionAction === 'APPROVE' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)')}`,
                                     opacity: (submittingAction.id === activeRequest.id || (decisionAction === 'REJECT' && !decisionComment.trim())) ? 0.5 : 1,
                                     cursor: (submittingAction.id === activeRequest.id || (decisionAction === 'REJECT' && !decisionComment.trim())) ? 'not-allowed' : 'pointer',
                                     transition: 'all 0.2s ease',
@@ -4392,9 +5095,9 @@ const Team = () => {
                                 {submittingAction.id === activeRequest.id ? (
                                     <RefreshCw size={16} className="animate-spin" />
                                 ) : (
-                                    decisionAction === 'APPROVE' ? <CheckCircle size={16} /> : <AlertCircle size={16} />
+                                    decisionAction === 'DIRECT_TO_HR' ? <ArrowRight size={16} /> : (decisionAction === 'APPROVE' ? <CheckCircle size={16} /> : <AlertCircle size={16} />)
                                 )}
-                                Confirm {decisionAction === 'APPROVE' ? 'Approval' : 'Rejection'}
+                                Confirm {decisionAction === 'DIRECT_TO_HR' ? 'Redirect to HR' : (decisionAction === 'APPROVE' ? 'Approval' : 'Rejection')}
                             </button>
                         </div>
                     </div>
@@ -4407,9 +5110,14 @@ const Team = () => {
                 const totalDays = selectedLeave.totalDays || selectedLeave.duration || 0;
                 const isLimitExceeded = limit !== null && limit !== undefined && totalDays > limit;
 
+                const isForwardedToHr = (selectedLeave.managerResponse && selectedLeave.managerResponse.toLowerCase().includes('forwarded directly to hr')) ||
+                    (selectedLeave.adminResponse && selectedLeave.adminResponse.toLowerCase().includes('forwarded directly to hr'));
+
                 // Live Flow Logic
                 const getManagerStep = () => {
+                    if (isForwardedToHr) return { icon: <ArrowRight size={16} />, color: '#3b82f6', statusText: 'Forwarded to HR' };
                     const status = selectedLeave.managerStatus;
+                    if (status === 'SKIPPED') return { icon: <Clock size={16} />, color: '#9ca3af', statusText: 'Skipped' };
                     if (status === 'APPROVED') return { icon: <CheckCircle size={16} />, color: '#10b981', statusText: 'Approved' };
                     if (status === 'REJECTED') return { icon: <XCircle size={16} />, color: '#ef4444', statusText: 'Rejected' };
                     return { icon: <Clock size={16} />, color: '#3b82f6', statusText: 'Pending' };
@@ -4419,6 +5127,7 @@ const Team = () => {
                     const status = selectedLeave.status;
                     if (status === 'APPROVED') return { icon: <CheckCircle size={16} />, color: '#10b981', statusText: 'Approved' };
                     if (status === 'REJECTED') return { icon: <XCircle size={16} />, color: '#ef4444', statusText: 'Rejected' };
+                    if (isForwardedToHr || selectedLeave.managerStatus === 'SKIPPED') return { icon: <Clock size={16} />, color: '#3b82f6', statusText: 'Pending' };
                     if (selectedLeave.managerStatus === 'PENDING') return { icon: <Clock size={16} />, color: '#9ca3af', statusText: 'Waiting' };
                     return { icon: <Clock size={16} />, color: '#3b82f6', statusText: 'Pending' };
                 };
@@ -4468,6 +5177,25 @@ const Team = () => {
                                         </span>
                                     </div>
                                 </div>
+
+                                {selectedLeave.isDelegated && (
+                                    <div style={{ 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        gap: '8px', 
+                                        marginBottom: '14px', 
+                                        padding: '8px 12px', 
+                                        borderRadius: '8px', 
+                                        background: '#e0e7ff', 
+                                        border: '1px solid #c7d2fe',
+                                        fontSize: '12px',
+                                        color: '#3730a3',
+                                        fontWeight: 600
+                                    }}>
+                                        <Shield size={16} color="#4338ca" />
+                                        <span>🛡️ Delegated Request: You are reviewing and approving this request on behalf of {selectedLeave.delegatedFrom || 'Manager'}.</span>
+                                    </div>
+                                )}
 
                                 {/* Request Highlights Grid - Compact */}
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '16px' }}>
@@ -4543,7 +5271,7 @@ const Team = () => {
                                         {[
                                             { label: 'Employee', name: selectedLeave.employeeName, icon: <CheckCircle size={14} />, color: '#10b981', statusText: 'Submitted' },
                                             { label: 'Manager', name: selectedLeave.managerName || 'Manager', ...managerStep },
-                                            ...(isLimitExceeded ? [{ label: 'HR / Admin', name: 'Final Approval', ...adminStep }] : [])
+                                            ...((isLimitExceeded || isForwardedToHr || selectedLeave.managerStatus === 'SKIPPED') ? [{ label: 'HR / Admin', name: 'Final Approval', ...adminStep }] : [])
                                         ].map((step, i) => (
                                             <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 1, position: 'relative', flex: 1 }}>
                                                 <div style={{
@@ -4587,9 +5315,41 @@ const Team = () => {
                                     {(() => {
                                         const reqStatus = (isOrgView ? (selectedLeave.status || 'PENDING') : (selectedLeave.managerStatus || 'PENDING')).toUpperCase();
                                         const isPending = reqStatus === 'PENDING' || reqStatus === 'SUBMITTED';
+                                        const reqEmpId = String(selectedLeave.employeeId || selectedLeave.employee?.employeeId || '').trim().toLowerCase();
+                                        const currentEmpId = String(user?.employeeId || '').trim().toLowerCase();
+                                        const isSelfRequest = Boolean(currentEmpId && reqEmpId && currentEmpId === reqEmpId);
+
                                         if (isPending) {
+                                            if (isSelfRequest) {
+                                                return (
+                                                    <span style={{ fontSize: '11px', color: '#64748b', background: '#f1f5f9', padding: '6px 12px', borderRadius: '6px', fontWeight: 600 }}>
+                                                        Self Request (No Self-Approval)
+                                                    </span>
+                                                );
+                                            }
                                             return (
                                                 <>
+                                                    {!isOrgView && (
+                                                        <button
+                                                            className="hr-btn-primary"
+                                                            disabled={submittingAction.id === selectedLeave.id}
+                                                            onClick={() => {
+                                                                setActiveRequest({ ...selectedLeave, reqType: 'LEAVE' });
+                                                                setDecisionAction('DIRECT_TO_HR');
+                                                                setDecisionComment('Forwarded directly to HR by manager');
+                                                                setShowDecisionModal(true);
+                                                                setShowLeaveDetailModal(false);
+                                                            }}
+                                                            style={{ backgroundColor: '#f59e0b', display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', borderRadius: '6px', fontSize: '12px' }}
+                                                        >
+                                                            {submittingAction.id === selectedLeave.id && submittingAction.action === 'DIRECT_TO_HR' ? (
+                                                                <RefreshCw size={14} className="animate-spin" />
+                                                            ) : (
+                                                                <ArrowRight size={14} />
+                                                            )}
+                                                            Direct to HR
+                                                        </button>
+                                                    )}
                                                     <button
                                                         className="hr-btn-primary"
                                                         disabled={submittingAction.id === selectedLeave.id}
@@ -5975,6 +6735,147 @@ const Team = () => {
                                 {assigningAsset ? 'Saving...' : (assetAssignMode === 'new' ? 'Assign New' : 'Assign Asset')}
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+            {/* Approval Delegation Modal */}
+            {showDelegationModal && (
+                <div className="hr-modal-overlay" style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    zIndex: 1100, backdropFilter: 'blur(4px)'
+                }}>
+                    <div className="hr-modal-card" style={{
+                        background: '#fff', borderRadius: '14px', width: '90%', maxWidth: '520px',
+                        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+                        overflow: 'hidden', animation: 'scaleUp 0.2s ease-out'
+                    }}>
+                        <div className="hr-modal-header" style={{
+                            padding: '16px 20px', borderBottom: '1px solid #f1f5f9',
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            background: '#f8fafc'
+                        }}>
+                            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Shield size={18} color="#4f46e5" />
+                                Add Approval Delegation
+                            </h3>
+                            <button
+                                type="button"
+                                onClick={() => setShowDelegationModal(false)}
+                                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b', fontSize: '18px' }}
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleCreateDelegation}>
+                            <div className="hr-modal-body" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                <div style={{ fontSize: '12px', color: '#475569', background: '#eff6ff', padding: '10px 12px', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
+                                    Delegate your approval rights to a peer manager or HR/CEO during your absence. Regular employees without managerial or leadership roles are excluded.
+                                </div>
+
+                                <div className="hr-form-group">
+                                    <label style={{ fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '4px', display: 'block' }}>
+                                        Delegate To (Manager / HR / CEO) *
+                                    </label>
+                                    <select
+                                        value={delegationForm.delegateeId}
+                                        onChange={(e) => setDelegationForm({ ...delegationForm, delegateeId: e.target.value })}
+                                        required
+                                        style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', background: '#fff' }}
+                                    >
+                                        <option value="">-- Select an eligible Manager or HR/CEO --</option>
+                                        {eligibleDelegates.map(c => (
+                                            <option key={c.id} value={c.id}>
+                                                {c.name} ({c.employeeId}) {c.designation ? `• ${c.designation}` : ''}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                    <div className="hr-form-group">
+                                        <label style={{ fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '4px', display: 'block' }}>
+                                            Start Date *
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={delegationForm.startDate}
+                                            min={new Date().toISOString().split('T')[0]}
+                                            onChange={(e) => setDelegationForm({ ...delegationForm, startDate: e.target.value })}
+                                            required
+                                            style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                                        />
+                                    </div>
+                                    <div className="hr-form-group">
+                                        <label style={{ fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '4px', display: 'block' }}>
+                                            End Date *
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={delegationForm.endDate}
+                                            min={delegationForm.startDate || new Date().toISOString().split('T')[0]}
+                                            onChange={(e) => setDelegationForm({ ...delegationForm, endDate: e.target.value })}
+                                            required
+                                            style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="hr-form-group">
+                                    <label style={{ fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '4px', display: 'block' }}>
+                                        Scope of Authority
+                                    </label>
+                                    <select
+                                        value={delegationForm.scope}
+                                        onChange={(e) => setDelegationForm({ ...delegationForm, scope: e.target.value })}
+                                        style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', background: '#fff' }}
+                                    >
+                                        <option value="ALL">ALL (Leaves, WFH, Expenses)</option>
+                                        <option value="LEAVE">LEAVE Requests Only</option>
+                                        <option value="WFH">WFH Requests Only</option>
+                                        <option value="EXPENSE">Expense Claims Only</option>
+                                    </select>
+                                </div>
+
+                                <div className="hr-form-group">
+                                    <label style={{ fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '4px', display: 'block' }}>
+                                        Reason / Handover Note
+                                    </label>
+                                    <textarea
+                                        value={delegationForm.reason}
+                                        onChange={(e) => setDelegationForm({ ...delegationForm, reason: e.target.value })}
+                                        placeholder="e.g. On annual leave from 15th to 25th Oct. Handing over team approvals."
+                                        rows={3}
+                                        style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', resize: 'vertical' }}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="hr-modal-footer" style={{
+                                padding: '14px 20px', borderTop: '1px solid #f1f5f9',
+                                display: 'flex', justifyContent: 'flex-end', gap: '10px',
+                                background: '#f8fafc'
+                            }}>
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    onClick={() => setShowDelegationModal(false)}
+                                    style={{ height: '36px', padding: '0 16px', fontSize: '13px' }}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="btn btn-primary"
+                                    disabled={creatingDelegation}
+                                    style={{ height: '36px', padding: '0 18px', fontSize: '13px', fontWeight: 600 }}
+                                >
+                                    {creatingDelegation ? 'Delegating...' : 'Confirm Delegation'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}

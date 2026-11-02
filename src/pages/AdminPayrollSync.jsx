@@ -54,7 +54,7 @@ export default function AdminPayrollSync() {
   const syncEmployees = async () => {
     if (
       !window.confirm(
-        'Push all employees in your organization to Payroll?\n\nOnly identity fields are sent (name, email, joining date, etc.). CTC/bank stay in Payroll.'
+        'Push all active employees in your organization to Payroll?\n\nCreates/updates identity fields from HRMS. Employees removed or inactivated in HRMS are removed from Payroll. CTC/bank stay in Payroll.'
       )
     ) {
       return;
@@ -65,11 +65,16 @@ export default function AdminPayrollSync() {
       const res = await payrollSyncAPI.syncAllEmployees();
       setLastEmployeeResult(res.data);
       const synced = res.data?.synced ?? 0;
+      const deactivated = res.data?.deactivated ?? 0;
       const failed = res.data?.failed ?? 0;
       if (failed > 0) {
-        toast.error(`Synced ${synced}, failed ${failed}`);
+        toast.error(`Synced ${synced}, removed ${deactivated}, failed ${failed}`);
       } else {
-        toast.success(`Synced ${synced} employee(s) to Payroll`);
+        toast.success(
+          deactivated > 0
+            ? `Synced ${synced} employee(s); removed ${deactivated} no longer active in HRMS`
+            : `Synced ${synced} employee(s) to Payroll`
+        );
       }
     } catch (e) {
       const msg =
@@ -121,11 +126,23 @@ export default function AdminPayrollSync() {
     <div className="main-content flex flex-col h-screen">
       <Header
         title="Payroll Sync"
-        subtitle="Finance › Push employee & time data to Payroll (one-way)"
+        subtitle="Optional bridge › HRMS → Pragva Payroll when both products are used"
       />
 
       <div className="page-content flex-1 overflow-y-auto p-6" style={{ background: '#f8fafc' }}>
         <div className="max-w-4xl mx-auto space-y-6">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 flex gap-3">
+            <Info size={18} className="shrink-0 mt-0.5 text-slate-500" />
+            <div>
+              <p className="font-medium text-slate-800">HRMS and Payroll are separate products</p>
+              <p className="mt-0.5">
+                Use HRMS alone for people ops, or Payroll alone for pay (add staff in Payroll).
+                When both are purchased under the same Suite company, Sync keeps tenancy aligned
+                and pushes roster/time one-way into Payroll.
+              </p>
+            </div>
+          </div>
+
           {/* Status */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="p-6 border-b border-gray-100 flex flex-wrap items-center justify-between gap-4">
@@ -149,8 +166,8 @@ export default function AdminPayrollSync() {
                     {loadingStatus
                       ? 'Checking connection…'
                       : enabled
-                        ? 'Connected — one-way HRMS → Payroll for this company'
-                        : 'Disabled on server — set PAYROLL_INTEGRATION_ENABLED=true'}
+                        ? 'Connected — one-way HRMS → Payroll for this Suite company'
+                        : 'Off — HRMS works alone. Enable only if this company also uses Pragva Payroll.'}
                   </p>
                 </div>
               </div>

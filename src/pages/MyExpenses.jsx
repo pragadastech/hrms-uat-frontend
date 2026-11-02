@@ -265,32 +265,88 @@ export default function MyExpenses() {
         <div
           className="expense-modal-overlay"
           onClick={() => !submitting && setShowModal(false)}
+          style={{ background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
         >
-          <div className="expense-modal expense-modal--wide" onClick={(e) => e.stopPropagation()}>
-            <div className="expense-modal-header expense-modal-header--split">
-              <h2>New expense request</h2>
-              <button type="button" className="expense-modal-close" onClick={() => setShowModal(false)} aria-label="Close">
+          <div
+            className="card"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: '820px',
+              maxHeight: '92vh',
+              display: 'flex',
+              flexDirection: 'column',
+              padding: 0,
+              overflow: 'hidden',
+              borderRadius: '16px',
+              boxShadow: '0 24px 48px rgba(0, 0, 0, 0.2)',
+              border: '1px solid var(--gray-10)'
+            }}
+          >
+            {/* Header */}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--gray-10)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--white-5)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ padding: '8px', background: 'rgba(99, 102, 241, 0.1)', color: '#6366f1', borderRadius: '10px' }}>
+                  <Receipt size={18} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: '700', color: 'var(--dark-500)', margin: 0, lineHeight: 1.2 }}>
+                    New Expense Request
+                  </h3>
+                  <p style={{ fontSize: '12px', color: 'var(--gray-500)', margin: '2px 0 0 0' }}>
+                    Submit itemized expenses and attach corresponding receipts
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => !submitting && setShowModal(false)}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  padding: '6px',
+                  borderRadius: '8px',
+                  color: 'var(--gray-400)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                aria-label="Close"
+              >
                 <X size={18} />
               </button>
             </div>
-            <form className="expense-modal-form" onSubmit={handleSubmit}>
-            <div className="expense-modal-body expense-modal-body--padded">
-                <div className="expense-form-row-top">
-                  <div className="expense-field expense-field--flex-2">
-                    <label>Title *</label>
+
+            {/* Form & Body */}
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, margin: 0 }}>
+              <div style={{ padding: '18px 20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px', flex: 1 }}>
+                
+                {/* Top Info Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.2fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: 'var(--dark-500)', marginBottom: '4px' }}>
+                      Title *
+                    </label>
                     <input
                       type="text"
                       required
-                      className="expense-form-control"
+                      className="form-input"
+                      style={{ width: '100%', height: '36px', boxSizing: 'border-box', fontSize: '12px' }}
                       placeholder="e.g. Client visit - Mumbai"
                       value={form.title}
                       onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
                     />
                   </div>
-                  <div className="expense-field expense-field--flex-1">
-                    <label>Currency</label>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: 'var(--dark-500)', marginBottom: '4px' }}>
+                      Currency
+                    </label>
                     <select
-                      className="expense-form-control"
+                      className="form-input"
+                      style={{ width: '100%', height: '36px', boxSizing: 'border-box', fontSize: '12px' }}
                       value={form.currency}
                       onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value }))}
                     >
@@ -298,91 +354,163 @@ export default function MyExpenses() {
                       <option value="USD">USD ($)</option>
                     </select>
                   </div>
-                  <div className="expense-field expense-field--flex-1">
-                    <label>Total Amount</label>
-                    <div className="expense-form-control expense-total-display">
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: 'var(--gray-500)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Total Amount
+                    </label>
+                    <div style={{
+                      height: '36px',
+                      background: 'var(--light-5, #f8fafc)',
+                      border: '1px solid var(--gray-10)',
+                      borderRadius: '8px',
+                      padding: '0 12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      fontSize: '1.05rem',
+                      fontWeight: '700',
+                      color: 'var(--primary-600)',
+                      boxSizing: 'border-box'
+                    }}>
                       {formatAmount(computeTotal(), form.currency)}
                     </div>
                   </div>
                 </div>
 
-                <div className="expense-field" style={{ marginBottom: '14px' }}>
-                  <label>Description (optional)</label>
+                {/* Description */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: 'var(--dark-500)', marginBottom: '4px' }}>
+                    Description (optional)
+                  </label>
                   <textarea
-                    className="expense-form-control"
-                    placeholder="Brief description of the overall expense"
+                    className="form-input"
+                    placeholder="Brief description or purpose of the overall expense..."
                     rows={2}
+                    style={{ width: '100%', resize: 'vertical', boxSizing: 'border-box', fontSize: '12px', minHeight: '52px' }}
                     value={form.description}
                     onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                   />
                 </div>
 
-                <div className="expense-items-block">
-                  <h4 style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b', marginBottom: '10px' }}>Line Items</h4>
-                  
-                  <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.8fr 1fr 1fr 1fr 40px', gap: '0', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                      <div style={{ padding: '12px 16px', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Category</div>
-                      <div style={{ padding: '12px 16px', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', borderLeft: '1px solid #e2e8f0' }}>Description</div>
-                      <div style={{ padding: '12px 16px', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', borderLeft: '1px solid #e2e8f0' }}>Amount</div>
-                      <div style={{ padding: '12px 16px', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', borderLeft: '1px solid #e2e8f0' }}>Date</div>
-                      <div style={{ padding: '12px 16px', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', borderLeft: '1px solid #e2e8f0' }}>Receipts</div>
-                      <div style={{ borderLeft: '1px solid #e2e8f0' }}></div>
+                {/* Line Items Table */}
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--dark-500)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Line Items ({form.items.length})
                     </div>
-                    
+                    <button
+                      type="button"
+                      onClick={addItem}
+                      className="btn-secondary"
+                      style={{ height: '28px', padding: '0 10px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--primary-600)' }}
+                    >
+                      <Plus size={13} /> Add Item
+                    </button>
+                  </div>
+
+                  <div style={{ border: '1px solid var(--gray-10)', borderRadius: '10px', overflow: 'hidden' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '130px 1.8fr 110px 125px 105px 36px', gap: 0, background: 'var(--light-5, #f8fafc)', borderBottom: '1px solid var(--gray-10)', fontSize: '11px', fontWeight: '700', color: 'var(--gray-500)', textTransform: 'uppercase' }}>
+                      <div style={{ padding: '8px 10px' }}>Category</div>
+                      <div style={{ padding: '8px 10px', borderLeft: '1px solid var(--gray-10)' }}>Description</div>
+                      <div style={{ padding: '8px 10px', borderLeft: '1px solid var(--gray-10)' }}>Amount</div>
+                      <div style={{ padding: '8px 10px', borderLeft: '1px solid var(--gray-10)' }}>Date</div>
+                      <div style={{ padding: '8px 10px', borderLeft: '1px solid var(--gray-10)' }}>Receipts</div>
+                      <div style={{ borderLeft: '1px solid var(--gray-10)' }}></div>
+                    </div>
+
                     <div>
                       {form.items.map((item, index) => (
-                        <div key={index} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.8fr 1fr 1fr 1fr 40px', gap: '0', borderBottom: index === form.items.length - 1 ? 'none' : '1px solid #e2e8f0', alignItems: 'stretch' }}>
-                          <div style={{ padding: '10px' }}>
+                        <div
+                          key={index}
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: '130px 1.8fr 110px 125px 105px 36px',
+                            gap: 0,
+                            borderBottom: index === form.items.length - 1 ? 'none' : '1px solid var(--gray-5)',
+                            alignItems: 'center',
+                            background: '#fff'
+                          }}
+                        >
+                          {/* Category */}
+                          <div style={{ padding: '6px 8px' }}>
                             <select
-                              className="expense-form-control"
+                              className="form-input"
                               value={item.category}
                               onChange={(e) => updateItem(index, 'category', e.target.value)}
-                              style={{ padding: '8px', borderRadius: '8px', fontSize: '13px', minHeight: '34px' }}
+                              style={{ width: '100%', height: '30px', padding: '0 6px', fontSize: '11px', borderRadius: '6px' }}
                             >
                               {CATEGORIES.map((c) => (
                                 <option key={c.value} value={c.value}>{c.label}</option>
                               ))}
                             </select>
                           </div>
-                          <div style={{ padding: '10px', borderLeft: '1px solid #f1f5f9' }}>
+
+                          {/* Description */}
+                          <div style={{ padding: '6px 8px', borderLeft: '1px solid var(--gray-5)' }}>
                             <input
                               type="text"
-                              className="expense-form-control"
+                              className="form-input"
                               placeholder="Describe item..."
                               value={item.description}
                               onChange={(e) => updateItem(index, 'description', e.target.value)}
-                              style={{ padding: '8px', borderRadius: '8px', fontSize: '13px', minHeight: '34px' }}
+                              style={{ width: '100%', height: '30px', padding: '0 8px', fontSize: '11px', borderRadius: '6px' }}
                             />
                           </div>
-                          <div style={{ padding: '10px', borderLeft: '1px solid #f1f5f9' }}>
+
+                          {/* Amount */}
+                          <div style={{ padding: '6px 8px', borderLeft: '1px solid var(--gray-5)' }}>
                             <div style={{ position: 'relative' }}>
-                              <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', color: '#94a3b8', fontWeight: 600 }}>{form.currency === 'INR' ? '₹' : '$'}</span>
+                              <span style={{ position: 'absolute', left: '6px', top: '50%', transform: 'translateY(-50%)', fontSize: '11px', color: 'var(--gray-400)', fontWeight: '600' }}>
+                                {form.currency === 'INR' ? '₹' : '$'}
+                              </span>
                               <input
                                 type="number"
-                                className="expense-form-control"
+                                className="form-input"
                                 step="0.01"
                                 min="0"
                                 placeholder="0.00"
                                 value={item.amount}
                                 onChange={(e) => updateItem(index, 'amount', e.target.value)}
-                                style={{ padding: '8px 8px 8px 22px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, minHeight: '34px' }}
+                                style={{ width: '100%', height: '30px', padding: '0 6px 0 18px', fontSize: '11px', fontWeight: '600', borderRadius: '6px' }}
                               />
                             </div>
                           </div>
-                          <div style={{ padding: '10px', borderLeft: '1px solid #f1f5f9' }}>
+
+                          {/* Date */}
+                          <div style={{ padding: '6px 8px', borderLeft: '1px solid var(--gray-5)' }}>
                             <input
                               type="date"
-                              className="expense-form-control"
+                              className="form-input"
                               value={item.expenseDate}
                               onChange={(e) => updateItem(index, 'expenseDate', e.target.value)}
-                              style={{ padding: '7px 8px', borderRadius: '8px', fontSize: '13px', minHeight: '34px' }}
+                              style={{ width: '100%', height: '30px', padding: '0 6px', fontSize: '11px', borderRadius: '6px' }}
                             />
                           </div>
-                          <div style={{ padding: '10px', borderLeft: '1px solid #f1f5f9' }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px', borderRadius: '8px', border: '1px dashed #cbd5e1', cursor: 'pointer', fontSize: '11px', color: '#64748b', justifyContent: 'center', minHeight: '34px', boxSizing: 'border-box' }}>
-                              <Upload size={14} />
-                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.receipts?.length > 0 ? `${item.receipts.length} Files` : 'Upload'}</span>
+
+                          {/* Upload Receipts */}
+                          <div style={{ padding: '6px 8px', borderLeft: '1px solid var(--gray-5)' }}>
+                            <label
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '0 6px',
+                                height: '30px',
+                                borderRadius: '6px',
+                                border: '1px dashed var(--gray-20, #cbd5e1)',
+                                cursor: 'pointer',
+                                fontSize: '11px',
+                                color: item.receipts?.length > 0 ? 'var(--primary-600)' : 'var(--gray-500)',
+                                background: item.receipts?.length > 0 ? 'rgba(99, 102, 241, 0.05)' : 'transparent',
+                                justifyContent: 'center',
+                                boxSizing: 'border-box'
+                              }}
+                              title="Upload receipt files (images or PDFs)"
+                            >
+                              <Upload size={12} />
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '65px' }}>
+                                {item.receipts?.length > 0 ? `${item.receipts.length} File${item.receipts.length > 1 ? 's' : ''}` : 'Upload'}
+                              </span>
                               <input
                                 type="file"
                                 multiple
@@ -391,47 +519,57 @@ export default function MyExpenses() {
                               />
                             </label>
                           </div>
-                          <div style={{ padding: '10px', borderLeft: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+
+                          {/* Remove row */}
+                          <div style={{ padding: '6px 4px', borderLeft: '1px solid var(--gray-5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <button
                               type="button"
                               onClick={() => removeItem(index)}
-                              style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
+                              disabled={form.items.length <= 1}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: form.items.length <= 1 ? 'var(--gray-300)' : '#dc2626',
+                                cursor: form.items.length <= 1 ? 'not-allowed' : 'pointer',
+                                padding: '4px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
                               title="Remove item"
                             >
-                              <Trash2 size={18} />
+                              <Trash2 size={14} />
                             </button>
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
-                  
-                  <button
-                    type="button"
-                    onClick={addItem}
-                    style={{ marginTop: '16px', padding: '10px 20px', fontSize: '13px', fontWeight: 600, background: 'white', border: '1.5px solid var(--expense-primary)', borderRadius: '10px', color: 'var(--expense-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
-                  >
-                    <Plus size={16} /> Add Another Item
-                  </button>
                 </div>
 
-            </div>
-            <div className="expense-modal-footer">
-              <button
-                type="button"
-                className="expense-btn-secondary expense-btn-footer"
-                onClick={() => !submitting && setShowModal(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="expense-btn-primary expense-btn-footer"
-                disabled={submitting}
-              >
-                {submitting ? 'Submitting…' : 'Submit Request'}
-              </button>
-            </div>
+              </div>
+
+              {/* Footer Actions */}
+              <div style={{ padding: '12px 20px', borderTop: '1px solid var(--gray-10)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--white-5)' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => !submitting && setShowModal(false)}
+                  style={{ height: '34px', padding: '0 16px', fontSize: '12px' }}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={submitting}
+                  style={{ height: '34px', padding: '0 18px', fontSize: '12px', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  {submitting && <RefreshCw size={13} className="animate-spin" />}
+                  {submitting ? 'Submitting…' : 'Submit Request'}
+                </button>
+              </div>
             </form>
           </div>
         </div>

@@ -31,7 +31,8 @@ import {
   X,
   Filter,
   Upload,
-  AlertCircle
+  AlertCircle,
+  ArrowRight
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { attendanceAPI, timeEntryAPI, createLeaveRequest, getPendingLeaveRequests, getEmployeeLeaveRequests, adminAPI, getAllLeaveRequests, getAcceptedLeaveRequests, getRejectedLeaveRequests, respondToLeaveRequest, employeeAPI, employeeProjectAPI, projectAPI, teamAPI, reportingAPI, timesheetScreenshotAPI, timesheetAPI, leaveBalanceAPI, holidayCalendarAPI, getLeaveBalances } from '../services/api';
@@ -8183,14 +8184,23 @@ export function Attendance({ initialTab = 'attendance' }) {
                     return (
                       <div className="hr-time-field-group full-width" style={{ marginTop: '-4px', marginBottom: '16px' }}>
                         <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', background: '#f8fafc', padding: '12px 16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                          <input
-                            type="checkbox"
-                            id="add_billable_check"
-                            checked={timeEntryForm.billable}
-                            onChange={(e) => setTimeEntryForm(prev => ({ ...prev, billable: e.target.checked }))}
-                            style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#3b82f6' }}
-                          />
-                          <label htmlFor="add_billable_check" style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b', cursor: 'pointer', marginBottom: 0 }}>This is a billable task</label>
+                          <div 
+                            onClick={() => setTimeEntryForm(prev => ({ ...prev, billable: !prev.billable }))}
+                            style={{ 
+                              width: '18px', height: '18px', cursor: 'pointer', flexShrink: 0,
+                              backgroundColor: timeEntryForm.billable ? '#6366f1' : '#ffffff', 
+                              border: timeEntryForm.billable ? '1px solid #6366f1' : '1.5px solid #cbd5e1', 
+                              borderRadius: '4px',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center'
+                            }}
+                          >
+                            {timeEntryForm.billable && (
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                              </svg>
+                            )}
+                          </div>
+                          <label onClick={() => setTimeEntryForm(prev => ({ ...prev, billable: !prev.billable }))} style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b', cursor: 'pointer', marginBottom: 0 }}>This is a billable task</label>
                         </div>
                       </div>
                     );
@@ -8404,14 +8414,23 @@ export function Attendance({ initialTab = 'attendance' }) {
                       return (
                         <div className="hr-time-field-group full-width" style={{ marginTop: '-4px', marginBottom: '16px' }}>
                           <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', background: '#f8fafc', padding: '12px 16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                            <input
-                              type="checkbox"
-                              id="edit_billable_check"
-                              checked={editEntryForm.billable}
-                              onChange={(e) => setEditEntryForm(prev => ({ ...prev, billable: e.target.checked }))}
-                              style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#3b82f6' }}
-                            />
-                            <label htmlFor="edit_billable_check" style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b', cursor: 'pointer', marginBottom: 0 }}>This is a billable task</label>
+                            <div 
+                              onClick={() => setEditEntryForm(prev => ({ ...prev, billable: !prev.billable }))}
+                              style={{ 
+                                width: '18px', height: '18px', cursor: 'pointer', flexShrink: 0,
+                                backgroundColor: editEntryForm.billable ? '#6366f1' : '#ffffff', 
+                                border: editEntryForm.billable ? '1px solid #6366f1' : '1.5px solid #cbd5e1', 
+                                borderRadius: '4px',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                              }}
+                            >
+                              {editEntryForm.billable && (
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                              )}
+                            </div>
+                            <label onClick={() => setEditEntryForm(prev => ({ ...prev, billable: !prev.billable }))} style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b', cursor: 'pointer', marginBottom: 0 }}>This is a billable task</label>
                           </div>
                         </div>
                       );
@@ -8489,9 +8508,13 @@ export function Attendance({ initialTab = 'attendance' }) {
         const isAdminActionRequired = isLimitExceeded || isAdminIntervened;
         const isAdminActionTaken = finalStatus !== 'PENDING' && !isActionFinalizedByManager;
 
+        const isForwardedToHr = (selectedLeaveDetail.managerResponse && selectedLeaveDetail.managerResponse.toLowerCase().includes('forwarded directly to hr')) ||
+          (selectedLeaveDetail.adminResponse && selectedLeaveDetail.adminResponse.toLowerCase().includes('forwarded directly to hr'));
+
         const getManagerStepProps = () => {
+          if (isForwardedToHr) return { icon: <ArrowRight size={16} />, color: '#3b82f6', statusText: 'Forwarded to HR' };
           if (isAdminIntervened && managerStatus === 'PENDING') return { icon: <Clock size={16} />, color: '#9ca3af', statusText: 'Skipped' };
-          if (managerStatus === 'SKIPPED') return { icon: <XCircle size={16} />, color: '#9ca3af', statusText: 'Skipped' };
+          if (managerStatus === 'SKIPPED') return { icon: <Clock size={16} />, color: '#9ca3af', statusText: 'Skipped' };
           if (managerStatus === 'APPROVED') return { icon: <CheckCircle size={16} />, color: '#10b981', statusText: 'Approved' };
           if (managerStatus === 'REJECTED') return { icon: <XCircle size={16} />, color: '#ef4444', statusText: 'Rejected' };
           return { icon: <Clock size={16} />, color: '#3b82f6', statusText: 'Pending' };
@@ -8631,9 +8654,11 @@ export function Attendance({ initialTab = 'attendance' }) {
                       { label: 'Employee', name: selectedLeaveDetail.employeeName || 'Employee', icon: <CheckCircle size={14} />, color: '#10b981', statusText: 'Submitted' },
                       {
                         label: 'Manager',
-                        name: (managerStatus === 'SKIPPED' || isAdminIntervened)
-                          ? 'N/A'
-                          : (selectedLeaveDetail.managerName || extractApproverName(selectedLeaveDetail.managerResponse) || 'Manager'),
+                        name: isForwardedToHr
+                          ? (selectedLeaveDetail.managerName || 'Manager')
+                          : ((managerStatus === 'SKIPPED' || isAdminIntervened)
+                            ? 'N/A'
+                            : (selectedLeaveDetail.managerName || extractApproverName(selectedLeaveDetail.managerResponse) || 'Manager')),
                         ...managerStep
                       },
                       ...(isAdminActionRequired || isAdminActionTaken ? [{

@@ -152,6 +152,7 @@ api.interceptors.request.use(
         config.url?.includes('/admin/auth/reset-password') ||
         config.url?.includes('/public/') ||
         config.url?.includes('/invitations/') ||
+        config.url?.includes('/email-actions/') ||
         config.url?.includes('/auth/setup/');
 
       if (!isPublicEndpoint) {
@@ -176,9 +177,11 @@ api.interceptors.request.use(
       // Don't delete Accept, but make sure Content-Type is gone
     }
 
+    console.log(`[API Request] ${config.method?.toUpperCase()} ${config.url}`);
     return config;
   },
   (error) => {
+    console.error(`[API Request Error] ${error?.config?.url}:`, error?.message);
     return Promise.reject(error);
   }
 );
@@ -186,9 +189,11 @@ api.interceptors.request.use(
 // Response interceptor to handle errors
 api.interceptors.response.use(
   (response) => {
+    console.log(`[API Response] ${response.status} ${response.config?.url}`);
     return response;
   },
   (error) => {
+    console.error(`[API Response Error/Canceled] ${error?.config?.url} Code: ${error?.code} Msg: ${error?.message} Status: ${error?.response?.status}`);
     // Get URL info first for all checks
     const requestUrl = error.config?.url || '';
     const baseURL = error.config?.baseURL || '';
@@ -487,6 +492,20 @@ export const adminAuthAPI = {
     const tenantId = getTenantIdFromStorage();
     const config = tenantId ? { headers: { 'X-Tenant-ID': tenantId } } : {};
     return api.post('/admin/auth/resend-otp', data, config);
+  },
+};
+
+// Employee Directory API (Safe, non-admin endpoints for Celebrations & Workplace Presence)
+export const employeeDirectoryAPI = {
+  getDirectory: () => {
+    const tenantId = getTenantIdFromStorage();
+    const config = tenantId ? { headers: { 'X-Tenant-ID': tenantId } } : {};
+    return api.get('/employee/directory', config);
+  },
+  getApprovedLeavesToday: () => {
+    const tenantId = getTenantIdFromStorage();
+    const config = tenantId ? { headers: { 'X-Tenant-ID': tenantId } } : {};
+    return api.get('/employee/approved-leaves-today', config);
   },
 };
 
@@ -1416,6 +1435,17 @@ export const resendInvitation = async (employeeId) => {
   return response.data;
 };
 
+// Email Action APIs (Leave Approval / Rejection / Direct-to-HR from email notifications)
+export const emailActionAPI = {
+  getStatus: (token) => api.get('/email-actions/leave-request/status', { params: { token } }),
+  validateToken: (token) => api.get('/email-actions/leave-request/validate-token', { params: { token } }),
+  approve: (token) => api.post('/email-actions/leave-request/approve', null, { params: { token } }),
+  managerApprove: (token) => api.post('/email-actions/leave-request/manager/approve', null, { params: { token } }),
+  reject: (token, response) => api.post('/email-actions/leave-request/reject', null, { params: { token, response } }),
+  managerReject: (token, response) => api.post('/email-actions/leave-request/manager/reject', null, { params: { token, response } }),
+  directToHr: (token) => api.post('/email-actions/leave-request/manager/direct-to-hr', null, { params: { token } }),
+};
+
 // Employee self-fill (onboarding form sent by HR)
 export const validateEmployeeSelfFillToken = async (token) => {
   const response = await api.get(`/public/employee-self-fill/validate/${token}`);
@@ -2145,7 +2175,16 @@ export const teamAPI = {
   // Dedicated team-out: returns team leave for Who's Out (same for RM and teammates; does not depend on scope)
   getTeamLeaveForWhosOut: () => api.get('/leave-requests/team-out'),
   // Expense Approvals (Manager)
-  getTeamExpenses: (managerId) => api.get('/manager/expenses', managerId ? { params: { managerId } } : {}),
+  getTeamExpenses: (managerIdOrParams, maybeMonth) => {
+    let params = {};
+    if (managerIdOrParams && typeof managerIdOrParams === 'object') {
+      params = { ...managerIdOrParams };
+    } else {
+      if (managerIdOrParams) params.managerId = managerIdOrParams;
+      if (maybeMonth) params.month = maybeMonth;
+    }
+    return api.get('/manager/expenses', Object.keys(params).length ? { params } : {});
+  },
   approveTeamExpense: (expenseId) => api.patch(`/manager/expenses/${expenseId}/approve`),
   rejectTeamExpense: (expenseId, rejectionReason) =>
     api.patch(`/manager/expenses/${expenseId}/reject`, { rejectionReason: rejectionReason || '' }),
@@ -2158,6 +2197,11 @@ export const teamAPI = {
     const params = managerId ? { managerId } : {};
     if (response) params.response = response;
     return api.post(`/manager/leave-requests/reject/${requestId}`, null, { params });
+  },
+  directLeaveRequestToHr: (requestId, managerId, response) => {
+    const params = managerId ? { managerId } : {};
+    if (response) params.response = response;
+    return api.post(`/manager/leave-requests/direct-to-hr/${requestId}`, null, { params });
   },
   cancelLeaveRequest: (requestId, managerId, reason) => {
     const params = managerId ? { managerId } : {};
@@ -2682,4 +2726,12 @@ export const featuresAPI = {
   getAllFeatures: () => api.get('/features/all'),
   getAvailableFeatures: () => api.get('/features/available'),
   updateFeatures: (enabledFeatures) => api.post('/features/update', enabledFeatures),
+};
+
+// Approval Delegation API
+export const delegationAPI = {
+  getMyDelegations: () => api.get('/delegations/my-delegations'),
+  createDelegation: (data) => api.post('/delegations', data),
+  revokeDelegation: (id) => api.delete(`/delegations/${id}/revoke`),
+  getEligibleDelegates: () => api.get('/delegations/eligible-delegates'),
 };

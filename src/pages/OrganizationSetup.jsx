@@ -686,26 +686,91 @@ export default function OrganizationSetup() {
           <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 className="card-title">Subscription Details</h3>
             {subscriptionData && (
-              <button
-                onClick={() => setShowUpgradeModal(true)}
-                className="hr-btn-primary"
-                style={{
-                  padding: '8px 16px',
-                  fontSize: '13px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <ArrowUp size={16} />
-                Upgrade Plan
-              </button>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                {((subscriptionData.remainingDays ?? subscriptionData.remaining_days ?? 999) <= 7 || subscriptionData.status === 'EXPIRED') && (
+                  <button
+                    onClick={() => setShowUpgradeModal(true)}
+                    className="hr-btn-primary"
+                    style={{
+                      padding: '8px 16px',
+                      fontSize: '13px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      background: '#10b981',
+                      borderColor: '#10b981'
+                    }}
+                  >
+                    <ArrowUp size={16} />
+                    Renew Plan
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowUpgradeModal(true)}
+                  className="hr-btn-primary"
+                  style={{
+                    padding: '8px 16px',
+                    fontSize: '13px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <ArrowUp size={16} />
+                  Upgrade Plan
+                </button>
+              </div>
             )}
           </div>
 
           <div className="card-body" style={{ padding: '16px 20px' }}>
             {subscriptionData ? (
               <>
+                {/* Expiry Warning Banner for 1 week / 7 days */}
+                {(subscriptionData.remainingDays ?? subscriptionData.remaining_days ?? 999) <= 7 && (
+                  <div style={{
+                    padding: '12px 16px',
+                    marginBottom: '16px',
+                    borderRadius: '8px',
+                    background: '#fffbeb',
+                    border: '1px solid #fde68a',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '10px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <Calendar size={18} style={{ color: '#d97706', flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: 600, color: '#92400e' }}>
+                          {(subscriptionData.remainingDays ?? subscriptionData.remaining_days ?? 0) <= 0
+                            ? 'Your subscription plan has expired!'
+                            : `Your subscription plan is expiring in ${subscriptionData.remainingDays ?? subscriptionData.remaining_days} day(s)!`}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#b45309' }}>
+                          Renew your current plan or upgrade to avoid any disruption to your organization's services.
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowUpgradeModal(true)}
+                      className="hr-btn-primary"
+                      style={{
+                        padding: '6px 14px',
+                        fontSize: '12px',
+                        background: '#d97706',
+                        borderColor: '#d97706',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <ArrowUp size={14} />
+                      Renew / Upgrade Now
+                    </button>
+                  </div>
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px', marginBottom: '20px' }}>
                   <div style={{ padding: '12px', background: '#f9fafb', borderRadius: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
@@ -884,7 +949,9 @@ export default function OrganizationSetup() {
                     const isCurrentPlan = (subscriptionData?.planName || subscriptionData?.plan_name) === plan.name;
                     const remainingDays = subscriptionData?.remainingDays ?? subscriptionData?.remaining_days ?? 0;
                     const isExpired = remainingDays <= 0;
+                    const isExpiringSoon = remainingDays <= 7;
                     const isTrial = subscriptionData?.isTrial || subscriptionData?.is_trial;
+                    const canRenewCurrent = isCurrentPlan && (isExpired || isTrial || isExpiringSoon);
                     const isPopular = index === 1 || plan.name?.toLowerCase().includes('pro') || plan.name?.toLowerCase().includes('premium');
                     const isDowngrade = !isCurrentPlan && !isTrial && plan.price < (subscriptionData?.price || 0);
 
@@ -906,13 +973,13 @@ export default function OrganizationSetup() {
                           maxWidth: '100%'
                         }}
                         onMouseEnter={(e) => {
-                          if (!isCurrentPlan) {
+                          if (!isCurrentPlan || canRenewCurrent) {
                             e.currentTarget.style.transform = 'translateY(-2px)';
                             e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
                           }
                         }}
                         onMouseLeave={(e) => {
-                          if (!isCurrentPlan) {
+                          if (!isCurrentPlan || canRenewCurrent) {
                             e.currentTarget.style.transform = 'translateY(0)';
                             e.currentTarget.style.boxShadow = 'none';
                           }
@@ -1063,7 +1130,7 @@ export default function OrganizationSetup() {
 
                         {/* Action Button */}
                         <div style={{ marginTop: 'auto' }}>
-                          {isCurrentPlan && !isExpired && !isTrial ? (
+                          {isCurrentPlan && !canRenewCurrent ? (
                             <button
                               disabled
                               style={{
@@ -1078,7 +1145,7 @@ export default function OrganizationSetup() {
                                 cursor: 'not-allowed'
                               }}
                             >
-                              Current
+                              Current Plan (Active)
                             </button>
                           ) : (
                             <button
@@ -1091,8 +1158,8 @@ export default function OrganizationSetup() {
                                 fontSize: '11px',
                                 fontWeight: 600,
                                 borderRadius: '6px',
-                                background: isCurrentPlan ? undefined : isDowngrade ? '#f3f4f6' : isPopular ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : undefined,
-                                border: isCurrentPlan ? undefined : isDowngrade ? '1px solid #cbd5e1' : isPopular ? 'none' : undefined,
+                                background: isCurrentPlan ? '#10b981' : isDowngrade ? '#f3f4f6' : isPopular ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : undefined,
+                                border: isCurrentPlan ? 'none' : isDowngrade ? '1px solid #cbd5e1' : isPopular ? 'none' : undefined,
                                 color: isDowngrade ? '#374151' : undefined
                               }}
                             >

@@ -165,12 +165,13 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
-  // Fetch features on mount if user is present but features are empty
+  // Refresh plan/module features on mount so sidebar reflects DB/plan changes
+  // (e.g. PAYROLL/Finance added to trial) instead of keeping a stale sessionStorage list.
   useEffect(() => {
-    if (!loading && isAuthenticated() && sessionType !== 'super-admin' && (!availableFeatures || availableFeatures.length === 0)) {
+    if (!loading && isAuthenticated() && sessionType !== 'super-admin') {
       fetchFeatureAccess();
     }
-  }, [loading, sessionType, availableFeatures]);
+  }, [loading, sessionType]);
 
   // Clear all auth data
   const clearAuthData = () => {

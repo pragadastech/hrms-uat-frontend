@@ -51,6 +51,7 @@ import DepartmentDetails from './pages/DepartmentDetails';
 import UnifiedLogin from './pages/UnifiedLogin';
 import AcceptInvitation from './pages/AcceptInvitation';
 import EmployeeSelfFill from './pages/EmployeeSelfFill';
+import EmailAction from './pages/EmailAction';
 import ResetPassword from './pages/ResetPassword';
 import PlaceholderPage from './pages/PlaceholderPage';
 import UserAccessControl from './pages/UserAccessControl';
@@ -140,7 +141,7 @@ const AppContent = ({ children }) => {
   return (
     <div className="app-container">
       <Sidebar />
-      <div className="main-content-wrapper" style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+      <div className="main-content-wrapper" style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, maxWidth: '100%', overflowX: 'hidden' }}>
         <Header global />
         <div className="main-content">
           {children}
@@ -185,6 +186,7 @@ function App() {
                     <Route path="/login" element={<UnifiedLogin />} />
                     <Route path="/accept-invitation" element={<AcceptInvitation />} />
                     <Route path="/employee-self-fill" element={<EmployeeSelfFill />} />
+                    <Route path="/email-action" element={<EmailAction />} />
                     <Route path="/reset-password" element={<ResetPassword />} />
                     <Route path="/admin/reset-password" element={<ResetPassword />} />
 
@@ -313,6 +315,13 @@ function App() {
                       <ProtectedRoute requireAdmin={true}>
                         <FeatureGate feature="WFH" fallback={<Navigate to="/admin/dashboard" />}>
                           <Layout><AdminWfh /></Layout>
+                        </FeatureGate>
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/admin/expenses" element={
+                      <ProtectedRoute requireAdmin={true}>
+                        <FeatureGate feature="EXPENSES" fallback={<Navigate to="/admin/dashboard" />}>
+                          <Layout><ExpenseManagement /></Layout>
                         </FeatureGate>
                       </ProtectedRoute>
                     } />

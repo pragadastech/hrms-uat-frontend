@@ -1256,8 +1256,8 @@ export default function AddEmployee() {
                 if (isEditMode) {
                     toast.success('Updated employee documents successfully!');
                 } else {
-                toast.success('Employee created successfully!');
-            }
+                    toast.success('Employee created successfully!');
+                }
             } else if (docsToUpload.length > 0) {
                 console.error('❌ Documents skipped: resolvedStringEmployeeId is empty');
                 toast.error('Employee saved but documents could not be linked. Upload them from the edit page.');
@@ -1861,7 +1861,7 @@ export default function AddEmployee() {
                                                         type="text"
                                                         name="otherState"
                                                         value={formData.otherState || ''}
-                                                    onChange={handleChange}
+                                                        onChange={handleChange}
                                                         className="form-input bg-gray-50 mt-2 animate-fadeIn"
                                                         placeholder="Please specify state"
                                                     />
@@ -1882,7 +1882,7 @@ export default function AddEmployee() {
                                                         type="text"
                                                         name="otherCity"
                                                         value={formData.otherCity || ''}
-                                                    onChange={handleChange}
+                                                        onChange={handleChange}
                                                         className="form-input bg-gray-50 mt-2 animate-fadeIn"
                                                         placeholder="Please specify city"
                                                     />
@@ -2161,7 +2161,7 @@ export default function AddEmployee() {
                                                          <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#111827', margin: 0 }}>Candidate Self-Fill Documents</h3>
                                                          <p style={{ fontSize: '12px', color: '#6b7280', margin: '2px 0 0 0' }}>Uploaded by candidate during self-onboarding fill</p>
                                                      </div>
-                                    </div>
+                                                 </div>
 
                                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                                      {getSubmittedDocumentNames(selfFillRequest.formData).map((docItem) => {

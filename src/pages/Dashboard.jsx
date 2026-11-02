@@ -5,16 +5,17 @@ import {
   Users, Building2, CheckCircle2, AlertCircle, Clock, Play, Square, CalendarDays,
   FileText, Bell, Trophy, Timer, MapPin, Home, Sun, Moon, Coffee, Calendar, CalendarClock, Loader2,
   Palmtree, CalendarCheck, Gift, CreditCard, ClipboardList, TrendingUp, UserPlus, FileSpreadsheet, Eye, Sparkles, Search,
-  Cloud, CloudRain, CloudLightning
+  Cloud, CloudRain, CloudLightning, Globe, Activity, PartyPopper
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
   adminAPI, employeeAPI, timeEntryAPI, knowledgeAPI, organizationAPI, holidayCalendarAPI, noticeAPI,
   getAcceptedLeaveRequests, teamAPI, reportingAPI, wfhAPI, getPendingLeaveRequests, respondToLeaveRequest,
-  complaintAPI, exitAPI, attendanceAPI, managerAnalyticsAPI
+  complaintAPI, exitAPI, attendanceAPI, managerAnalyticsAPI, employeeDirectoryAPI
 } from '../services/api';
 import { formatTimeTo12h, formatDateLocal, resolveAttendanceClockTime } from '../utils/timeUtils';
+import { formatWorkLocationLabel, formatLeaveTypeLabel } from '../utils/labelUtils';
 import { toast } from 'react-hot-toast';
 import Header from '../components/Header';
 import HolidayBanner from '../components/HolidayBanner';
@@ -248,6 +249,10 @@ const Dashboard = () => {
   const [clockedInEmployees, setClockedInEmployees] = useState([]);
   const [todayAttendance, setTodayAttendance] = useState(() => getCached('todayAttendance', []));
   const [teamAttendanceToday, setTeamAttendanceToday] = useState(() => getCached('teamAttendanceToday', []));
+  const [orgEmployees, setOrgEmployees] = useState([]);
+  const [liveClockedInEmployees, setLiveClockedInEmployees] = useState([]);
+  const [subordinatesList, setSubordinatesList] = useState([]);
+  const [approvedLeavesList, setApprovedLeavesList] = useState([]);
   const [adminNotices, setAdminNotices] = useState([]);
   const [activeChartTab, setActiveChartTab] = useState('presence');
   const [celebrationTab, setCelebrationTab] = useState('birthdays');
@@ -749,6 +754,48 @@ const Dashboard = () => {
         if (!isAdmin() || shouldShowPersonalClock) {
           await fetchTeamAttendanceForDashboard();
         }
+
+        // Fetch directory and presence data for Employee Dashboard Celebrations & Workplace Presence (only active employees)
+        try {
+          const [empRes, clockedRes, teamSubRes, leavesRes] = await Promise.allSettled([
+            employeeDirectoryAPI.getDirectory(),
+            timeEntryAPI.getCurrentlyClockedInEmployees(),
+            (user?.employeeId || clockEmployeeId) ? teamAPI.getTeamOverview(user?.employeeId || clockEmployeeId) : Promise.resolve({ data: [] }),
+            employeeDirectoryAPI.getApprovedLeavesToday()
+          ]);
+
+          const filterActiveEmps = (arr) => {
+            if (!Array.isArray(arr)) return [];
+            return arr.filter((emp) => {
+              if (!emp) return false;
+              if (emp.isActive === false || emp.active === false) return false;
+              const st = String(emp.status || emp.employmentStatus || '').trim().toUpperCase();
+              if (['INACTIVE', 'EXIT', 'TERMINATED', 'RESIGNED'].includes(st)) return false;
+              return true;
+            });
+          };
+
+          if (empRes.status === 'fulfilled') {
+            const val = empRes.value?.data || empRes.value || [];
+            const list = Array.isArray(val) ? val : (val.employees || val.data || []);
+            setOrgEmployees(filterActiveEmps(list));
+          }
+          if (clockedRes.status === 'fulfilled') {
+            const val = clockedRes.value?.data || clockedRes.value || [];
+            setLiveClockedInEmployees(Array.isArray(val) ? val : []);
+          }
+          if (teamSubRes.status === 'fulfilled') {
+            const val = teamSubRes.value?.data || teamSubRes.value || [];
+            const list = Array.isArray(val) ? val : (val.teamMembers || val.members || []);
+            setSubordinatesList(filterActiveEmps(list));
+          }
+          if (leavesRes.status === 'fulfilled') {
+            const val = leavesRes.value?.data || leavesRes.value?.leaveRequests || leavesRes.value || [];
+            setApprovedLeavesList(Array.isArray(val) ? val : []);
+          }
+        } catch (err) {
+          console.warn('Error fetching social directory data for dashboard:', err);
+        }
       } catch (e) {
         console.error(e);
       } finally {
@@ -881,7 +928,9 @@ const Dashboard = () => {
     { icon: <FileText size={24} />, title: 'Payslips', desc: 'View payslips', path: isAdmin() ? '/admin/payroll' : '/employee/payslips', color: '#8b5cf6', module: 'PAYROLL' },
   ].filter((a) => !a.module || hasModule(a.module));
 
-  const isAdminView = isAdmin();
+  const location = useLocation();
+  const isEmployeePath = location.pathname.startsWith('/employee');
+  const isAdminView = !isEmployeePath && isAdmin();
   const greeting = getGreeting();
   const currentDate = getCurrentDate();
 
@@ -1595,6 +1644,10 @@ const Dashboard = () => {
           weatherInfo={weatherInfo}
           setWeatherInfo={setWeatherInfo}
           teamAttendanceToday={teamAttendanceToday}
+          orgEmployees={orgEmployees}
+          clockedInEmployees={liveClockedInEmployees}
+          subordinates={subordinatesList}
+          approvedLeaves={approvedLeavesList}
         />
         </div>
       )}
@@ -1716,7 +1769,11 @@ const EmployeeDashboardView = ({
   activeLeaveTab, setActiveLeaveTab, leaveBalances, 
   recentLeaveHistory, user, activeHolidays,
   weatherType, setWeatherType, weatherInfo, setWeatherInfo,
-  teamAttendanceToday = []
+  teamAttendanceToday = [],
+  orgEmployees = [],
+  clockedInEmployees = [],
+  subordinates = [],
+  approvedLeaves = []
 }) => {
   const handleManualWeather = (type) => {
     setWeatherType(type);
@@ -1893,36 +1950,7 @@ const EmployeeDashboardView = ({
           </div>
         </div>
 
-        {teamAttendanceToday.length > 0 && (
-          <div className="emp-card">
-            <div className="emp-card-hd">
-              <div className="emp-card-title">Team Attendance Today</div>
-              <button type="button" className="ft-btn" onClick={() => navigate('/manager/team?tab=attendance')}>View All →</button>
-            </div>
-            <div className="emp-card-body" style={{ padding: 0 }}>
-              <div className="dash-attendance-list dash-attendance-list-emp">
-                <div className="dash-attendance-list-header">
-                  <span>Employee</span>
-                  <span>Check In</span>
-                  <span>Check Out</span>
-                </div>
-                <div className="dash-attendance-list-body">
-                  {teamAttendanceToday.slice(0, 6).map((record, idx) => (
-                    <div key={record.employeeId || idx} className="dash-attendance-row">
-                      <span className="dash-att-name" title={record.employeeName}>{record.employeeName}</span>
-                      <span className="dash-att-time">{record.clockInDisplay}</span>
-                      <span className="dash-att-time dash-att-out">
-                        {record.clockOutDisplay !== '--:--'
-                          ? record.clockOutDisplay
-                          : (String(record.status || record.todayStatus || '').toUpperCase() === 'PRESENT' ? 'Live' : '--:--')}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+
 
         {/* Time Off Balance */}
         <div className="emp-card">
@@ -2062,6 +2090,772 @@ const EmployeeDashboardView = ({
             </div>
           </div>
         </div>
+      </div>
+
+      {/* 2 New Cards: Celebrations (Birthdays & Anniversaries DOJ) and Workplace Presence (Online & Out of Office) */}
+      <div className="emp-community-grid">
+        <CelebrationsCard 
+          user={user} 
+          orgEmployees={orgEmployees} 
+          subordinates={subordinates} 
+        />
+        <WorkplacePresenceCard 
+          user={user} 
+          orgEmployees={orgEmployees} 
+          subordinates={subordinates} 
+          clockedInEmployees={clockedInEmployees} 
+          teamAttendance={teamAttendanceToday} 
+          approvedLeaves={approvedLeaves} 
+        />
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// Helper Functions for Social / Presence Data
+// ============================================================================
+
+const isEmployeeActive = (emp) => {
+  if (!emp) return false;
+  if (emp.isActive === false || emp.active === false) return false;
+  const st = String(emp.status || emp.employmentStatus || '').trim().toUpperCase();
+  if (['INACTIVE', 'EXIT', 'TERMINATED', 'RESIGNED'].includes(st)) return false;
+  return true;
+};
+
+const getScopedEmployees = (scope, orgEmployees = [], subordinates = [], user) => {
+  const activeOrg = (orgEmployees || []).filter(isEmployeeActive);
+  const activeSubs = (subordinates || []).filter(isEmployeeActive);
+
+  if (!activeOrg || activeOrg.length === 0) {
+    if (scope === 'TEAM' && activeSubs && activeSubs.length > 0) return activeSubs;
+    return [];
+  }
+
+  if (scope === 'TEAM') {
+    const subIds = new Set(
+      activeSubs.map((s) => String(s.employeeId || s.id).toLowerCase())
+    );
+    const mgrId = String(user?.id || '');
+    const mgrCode = String(user?.employeeId || '').toLowerCase();
+    const mgrFullName = `${user?.firstName || ''} ${user?.lastName || ''}`.trim().toLowerCase();
+
+    const teamList = activeOrg.filter((emp) => {
+      const empId = String(emp.employeeId || '').toLowerCase();
+      const id = String(emp.id || '');
+      const rptId = String(emp.reportingManagerId || '');
+      const rptCode = String(emp.reportingManagerEmpCode || '').toLowerCase();
+      const rptName = String(emp.reportingManagerName || '').trim().toLowerCase();
+
+      return (
+        subIds.has(empId) ||
+        subIds.has(id) ||
+        (mgrId && rptId === mgrId) ||
+        (mgrCode && rptCode === mgrCode) ||
+        (mgrFullName && rptName === mgrFullName)
+      );
+    });
+
+    if (teamList.length === 0 && activeSubs.length > 0) {
+      return activeSubs;
+    }
+    return teamList;
+  }
+
+  if (scope === 'DEPARTMENT') {
+    // Determine the current user's department name
+    // Check user object first, then fall back to matching employee in activeOrg by employeeId or id
+    let myDept = String(user?.departmentName || user?.department?.name || user?.department || '').trim();
+    if (!myDept && user) {
+      const currentEmpId = String(user.employeeId || user.id || '').toLowerCase();
+      const currentEmp = activeOrg.find(
+        (e) => String(e.employeeId || '').toLowerCase() === currentEmpId || String(e.id || '') === currentEmpId
+      );
+      if (currentEmp) {
+        myDept = String(currentEmp.departmentName || currentEmp.department?.name || currentEmp.department || '').trim();
+      }
+    }
+
+    if (!myDept) {
+      // If user has no department assigned, do not dump all departments
+      return [];
+    }
+
+    const myDeptNormalized = myDept.toLowerCase();
+    const deptList = activeOrg.filter((emp) => {
+      const empDept = String(emp.departmentName || emp.department?.name || emp.department || '').trim().toLowerCase();
+      return empDept && (empDept === myDeptNormalized || empDept.replace(/\s+/g, '') === myDeptNormalized.replace(/\s+/g, ''));
+    });
+    return deptList;
+  }
+
+  // 'ORG'
+  return activeOrg;
+};
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
+const calculateUpcomingCelebrations = (empList = []) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const curYear = today.getFullYear();
+
+  const bdays = [];
+  const annivs = [];
+
+  empList.forEach((emp) => {
+    if (!isEmployeeActive(emp)) return;
+
+    // 1. Birthday
+    if (emp.dateOfBirth) {
+      try {
+        const [y, m, d] = String(emp.dateOfBirth).split('T')[0].split('-').map(Number);
+        if (m && d) {
+          const monthIndex = m - 1; // 0 to 11
+          let nextBday = new Date(curYear, monthIndex, d);
+          nextBday.setHours(0, 0, 0, 0);
+          if (nextBday < today) {
+            nextBday = new Date(curYear + 1, monthIndex, d);
+            nextBday.setHours(0, 0, 0, 0);
+          }
+          const diffDaysNext = Math.round((nextBday - today) / (1000 * 60 * 60 * 24));
+          const thisYearDate = new Date(curYear, monthIndex, d);
+          thisYearDate.setHours(0, 0, 0, 0);
+          const diffDaysThisYear = Math.round((thisYearDate - today) / (1000 * 60 * 60 * 24));
+
+          const dateDisplay = thisYearDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+          let tag = `In ${diffDaysNext} days`;
+          let tagClass = 'normal';
+          if (diffDaysThisYear === 0) {
+            tag = 'Today 🎂';
+            tagClass = 'today';
+          } else if (diffDaysThisYear === 1) {
+            tag = 'Tomorrow';
+            tagClass = 'soon';
+          } else if (diffDaysThisYear > 1 && diffDaysThisYear <= 7) {
+            tag = `In ${diffDaysThisYear} days`;
+            tagClass = 'soon';
+          } else if (diffDaysThisYear === -1) {
+            tag = 'Yesterday';
+            tagClass = 'passed';
+          } else if (diffDaysThisYear < -1) {
+            tag = `${Math.abs(diffDaysThisYear)} days ago`;
+            tagClass = 'passed';
+          } else {
+            tag = `In ${diffDaysNext} days`;
+            tagClass = diffDaysNext <= 7 ? 'soon' : 'normal';
+          }
+
+          bdays.push({
+            id: `bday-${emp.id || emp.employeeId}`,
+            employee: emp,
+            type: 'BIRTHDAY',
+            monthIndex,
+            day: d,
+            daysRemaining: diffDaysNext,
+            diffDaysThisYear,
+            eventDate: thisYearDate,
+            dateDisplay,
+            tag,
+            tagClass,
+            title: 'Birthday'
+          });
+        }
+      } catch (_) {}
+    }
+
+    // 2. Work Anniversary (DOJ)
+    const dojVal = emp.joiningDate || emp.hireDate;
+    if (dojVal) {
+      try {
+        const [y, m, d] = String(dojVal).split('T')[0].split('-').map(Number);
+        if (y && m && d) {
+          const monthIndex = m - 1; // 0 to 11
+          
+          // An employee cannot have a work anniversary in their very first year of joining (e.g. joined in 2026 cannot have 1st anniversary in 2026)
+          // If joined in the current year or future, their 1st anniversary will only occur in curYear + 1 (or later)
+          const isJoinedThisYearOrFuture = y >= curYear;
+          const annivYear = isJoinedThisYearOrFuture ? y + 1 : curYear;
+          const annivDate = new Date(annivYear, monthIndex, d);
+          annivDate.setHours(0, 0, 0, 0);
+
+          let nextAnniv = new Date(curYear, monthIndex, d);
+          nextAnniv.setHours(0, 0, 0, 0);
+          if (nextAnniv < today || y >= curYear) {
+            nextAnniv = new Date(Math.max(curYear + 1, y + 1), monthIndex, d);
+            nextAnniv.setHours(0, 0, 0, 0);
+          }
+
+          const diffDaysNext = Math.round((nextAnniv - today) / (1000 * 60 * 60 * 24));
+          const diffDaysThisYear = Math.round((annivDate - today) / (1000 * 60 * 60 * 24));
+
+          const years = annivDate.getFullYear() - y;
+          if (years < 1) return; // Must have completed at least 1 year
+
+          const origDoj = new Date(y, monthIndex, d);
+          const dojFormatted = origDoj.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+          const dateDisplay = annivDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+          const ordinal = (n) => {
+            if (n <= 0) return '1st';
+            const s = ['th', 'st', 'nd', 'rd'];
+            const v = n % 100;
+            return n + (s[(v - 20) % 10] || s[v] || s[0]);
+          };
+
+          let tag = `In ${diffDaysNext} days`;
+          let tagClass = 'normal';
+          if (diffDaysThisYear === 0) {
+            tag = 'Today 🎉';
+            tagClass = 'today';
+          } else if (diffDaysThisYear === 1) {
+            tag = 'Tomorrow';
+            tagClass = 'soon';
+          } else if (diffDaysThisYear > 1 && diffDaysThisYear <= 7) {
+            tag = `In ${diffDaysThisYear} days`;
+            tagClass = 'soon';
+          } else if (diffDaysThisYear === -1) {
+            tag = 'Yesterday';
+            tagClass = 'passed';
+          } else if (diffDaysThisYear < -1 && !isJoinedThisYearOrFuture) {
+            tag = `${Math.abs(diffDaysThisYear)} days ago`;
+            tagClass = 'passed';
+          } else {
+            tag = `In ${diffDaysNext} days`;
+            tagClass = diffDaysNext <= 7 ? 'soon' : 'normal';
+          }
+
+          annivs.push({
+            id: `anniv-${emp.id || emp.employeeId}`,
+            employee: emp,
+            type: 'ANNIVERSARY',
+            monthIndex,
+            day: d,
+            annivYear,
+            daysRemaining: diffDaysNext,
+            diffDaysThisYear,
+            years,
+            yearsDisplay: `${ordinal(years)} Anniversary`,
+            dojFormatted,
+            eventDate: annivDate,
+            dateDisplay,
+            tag,
+            tagClass,
+            title: `${ordinal(years)} Work Anniversary`
+          });
+        }
+      } catch (_) {}
+    }
+  });
+
+  return { birthdays: bdays, anniversaries: annivs, allEvents: [...bdays, ...annivs] };
+};
+
+const calculateWorkplacePresence = ({ scopedEmployees = [], clockedInEmployees = [], teamAttendance = [], approvedLeaves = [] }) => {
+  const todayStr = formatDateLocal(new Date());
+
+  // 1. Clocked in map
+  const clockedMap = new Map();
+  (clockedInEmployees || []).forEach((c) => {
+    if (c.employeeId) clockedMap.set(String(c.employeeId).toLowerCase(), c);
+    if (c.employeeEmail) clockedMap.set(String(c.employeeEmail).toLowerCase(), c);
+  });
+
+  // Also integrate team attendance if employee is clocked in or present
+  (teamAttendance || []).forEach((t) => {
+    const isPresent =
+      String(t.status || t.todayStatus || '').toUpperCase() === 'PRESENT' ||
+      (t.clockInDisplay && t.clockInDisplay !== '--:--' && (!t.clockOutDisplay || t.clockOutDisplay === '--:--' || t.clockOutDisplay === 'Live'));
+    if (isPresent && t.employeeId) {
+      const key = String(t.employeeId).toLowerCase();
+      if (!clockedMap.has(key)) {
+        clockedMap.set(key, {
+          employeeId: t.employeeId,
+          employeeName: t.employeeName,
+          clockInTimeFormatted: t.clockInDisplay,
+          workLocation: t.workLocation || 'OFFICE'
+        });
+      }
+    }
+  });
+
+  // 2. Out of office map
+  const outMap = new Map();
+  (approvedLeaves || []).forEach((l) => {
+    const start = String(l.startDate || '').split('T')[0];
+    const end = String(l.endDate || '').split('T')[0];
+    if (todayStr >= start && todayStr <= end) {
+      const key = String(l.employeeId || l.employee?.employeeId || '').toLowerCase();
+      if (key) {
+        outMap.set(key, {
+          type: l.leaveTypeName || l.leaveType || 'On Leave',
+          reason: l.reason || 'Approved Leave'
+        });
+      }
+    }
+  });
+
+  // Check team attendance for leave / absent status
+  (teamAttendance || []).forEach((t) => {
+    const st = String(t.status || t.todayStatus || '').toUpperCase();
+    if (['ON_LEAVE', 'LEAVE', 'ABSENT'].includes(st)) {
+      const key = String(t.employeeId || '').toLowerCase();
+      if (!outMap.has(key)) {
+        outMap.set(key, {
+          type: st === 'ABSENT' ? 'Out of Office' : (t.leaveType || 'On Leave'),
+          reason: 'Out of Office'
+        });
+      }
+    }
+  });
+
+  const list = (scopedEmployees || []).filter(isEmployeeActive).map((emp) => {
+    const empId = String(emp.employeeId || '').toLowerCase();
+    const empEmail = String(emp.email || '').toLowerCase();
+
+    const clockRecord = clockedMap.get(empId) || clockedMap.get(empEmail);
+    const leaveRecord = outMap.get(empId) || outMap.get(empEmail);
+
+    let status = 'OFFLINE';
+    let statusLabel = 'Offline';
+    let details = 'Not clocked in';
+    let rawLocation = emp.workLocation || 'Office';
+
+    if (clockRecord) {
+      status = 'ONLINE';
+      statusLabel = 'Online';
+      rawLocation = clockRecord.workLocation || emp.workLocation || 'Office';
+      details = clockRecord.clockInTimeFormatted ? `Since ${clockRecord.clockInTimeFormatted}` : 'Active Today';
+    } else if (leaveRecord) {
+      status = 'OUT_OF_OFFICE';
+      const formattedLeave = formatLeaveTypeLabel(leaveRecord.type);
+      statusLabel = 'Out of Office';
+      details = formattedLeave || 'On Leave Today';
+    }
+
+    const location = formatWorkLocationLabel(rawLocation, { fallback: 'Office' });
+
+    return {
+      ...emp,
+      presenceStatus: status,
+      presenceLabel: statusLabel,
+      presenceDetails: details,
+      presenceLocation: location,
+      clockRecord
+    };
+  });
+
+  // Sorting: Online first, then Out of Office, then Offline
+  list.sort((a, b) => {
+    const rank = { ONLINE: 1, OUT_OF_OFFICE: 2, OFFLINE: 3 };
+    return (rank[a.presenceStatus] || 4) - (rank[b.presenceStatus] || 4);
+  });
+
+  const onlineCount = list.filter((i) => i.presenceStatus === 'ONLINE').length;
+  const outCount = list.filter((i) => i.presenceStatus === 'OUT_OF_OFFICE').length;
+  const offlineCount = list.filter((i) => i.presenceStatus === 'OFFLINE').length;
+
+  return { list, onlineCount, outCount, offlineCount, total: list.length };
+};
+
+// ============================================================================
+// Card 1: Celebrations (Birthdays & Anniversaries DOJ)
+// ============================================================================
+
+const CelebrationsCard = ({ user, orgEmployees = [], subordinates = [] }) => {
+  const isManager = isManagerUser(user);
+  const currentMonthIndex = new Date().getMonth(); // 0 to 11
+  const [scope, setScope] = React.useState(isManager ? 'TEAM' : 'DEPARTMENT');
+  const [selectedMonth, setSelectedMonth] = React.useState(currentMonthIndex); // Default to current/present month!
+  const [activeTab, setActiveTab] = React.useState('ALL'); // 'ALL' | 'BIRTHDAYS' | 'ANNIVERSARIES'
+
+  const scopeOptions = React.useMemo(() => {
+    if (isManager) {
+      return [
+        { id: 'TEAM', label: 'My Team', icon: <Users size={12} /> },
+        { id: 'DEPARTMENT', label: 'Department', icon: <Building2 size={12} /> },
+        { id: 'ORG', label: 'All Org', icon: <Globe size={12} /> }
+      ];
+    }
+    return [
+      { id: 'DEPARTMENT', label: 'Department', icon: <Building2 size={12} /> },
+      { id: 'ORG', label: 'All Org', icon: <Globe size={12} /> }
+    ];
+  }, [isManager]);
+
+  const scopedEmployees = React.useMemo(() => {
+    return getScopedEmployees(scope, orgEmployees, subordinates, user);
+  }, [scope, orgEmployees, subordinates, user]);
+
+  const { birthdays, anniversaries, allEvents } = React.useMemo(() => {
+    return calculateUpcomingCelebrations(scopedEmployees);
+  }, [scopedEmployees]);
+
+  // Filter events based on selected month (by default: current month)
+  const monthFilteredEvents = React.useMemo(() => {
+    let list = [...allEvents];
+    if (selectedMonth !== 'ALL') {
+      const curYear = new Date().getFullYear();
+      list = list.filter((evt) => {
+        if (evt.monthIndex !== selectedMonth) return false;
+        // If an anniversary is for next year (e.g., employee joined in 2026, so 1st anniv is in 2027),
+        // it should only appear when viewing next upcoming celebrations or when viewing that month in its anniversary year,
+        // not in the past months of the current year (2026) when they just joined.
+        if (evt.type === 'ANNIVERSARY' && evt.annivYear && evt.annivYear > curYear) {
+          return false;
+        }
+        return true;
+      });
+      // Within the month, sort by day of the month (1st to 31st)
+      return list.sort((a, b) => a.day - b.day);
+    }
+    // All months: sort by next upcoming event
+    return list.sort((a, b) => a.daysRemaining - b.daysRemaining);
+  }, [allEvents, selectedMonth]);
+
+  const monthBirthdays = React.useMemo(() => {
+    return monthFilteredEvents.filter((e) => e.type === 'BIRTHDAY');
+  }, [monthFilteredEvents]);
+
+  const monthAnniversaries = React.useMemo(() => {
+    return monthFilteredEvents.filter((e) => e.type === 'ANNIVERSARY');
+  }, [monthFilteredEvents]);
+
+  const displayedEvents = React.useMemo(() => {
+    if (activeTab === 'BIRTHDAYS') return monthBirthdays;
+    if (activeTab === 'ANNIVERSARIES') return monthAnniversaries;
+    return monthFilteredEvents;
+  }, [activeTab, monthBirthdays, monthAnniversaries, monthFilteredEvents]);
+
+  const scopeLabel = scopeOptions.find((o) => o.id === scope)?.label || 'Selected Group';
+  const monthLabel = selectedMonth === 'ALL' ? 'All Months' : MONTH_NAMES[selectedMonth];
+
+  return (
+    <div className="emp-card emp-social-card">
+      <div className="emp-social-card-hd">
+        <div className="emp-social-card-title">
+          <PartyPopper size={18} style={{ color: '#ec4899' }} />
+          Celebrations
+        </div>
+        <div className="emp-scope-pills">
+          {scopeOptions.map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              className={`emp-scope-btn ${scope === opt.id ? 'active' : ''}`}
+              onClick={() => setScope(opt.id)}
+            >
+              {opt.icon}
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="emp-filter-row">
+        <div className="emp-filter-tabs">
+          <button
+            type="button"
+            className={`emp-filter-tab ${activeTab === 'ALL' ? 'active' : ''}`}
+            onClick={() => setActiveTab('ALL')}
+          >
+            All ({monthFilteredEvents.length})
+          </button>
+          <button
+            type="button"
+            className={`emp-filter-tab ${activeTab === 'BIRTHDAYS' ? 'active' : ''}`}
+            onClick={() => setActiveTab('BIRTHDAYS')}
+          >
+            Birthdays ({monthBirthdays.length})
+          </button>
+          <button
+            type="button"
+            className={`emp-filter-tab ${activeTab === 'ANNIVERSARIES' ? 'active' : ''}`}
+            onClick={() => setActiveTab('ANNIVERSARIES')}
+          >
+            Anniversaries ({monthAnniversaries.length})
+          </button>
+        </div>
+
+        <div className="emp-month-selector" title="Filter celebrations by month">
+          <Calendar size={13} style={{ color: '#6366f1' }} />
+          <select
+            className="emp-month-select"
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value === 'ALL' ? 'ALL' : Number(e.target.value))}
+          >
+            {MONTH_NAMES.map((name, idx) => (
+              <option key={idx} value={idx}>
+                {name} {idx === currentMonthIndex ? '(Current)' : ''}
+              </option>
+            ))}
+            <option value="ALL">All Months</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="emp-social-list">
+        {displayedEvents.length === 0 ? (
+          <div className="emp-social-empty">
+            <Gift size={32} style={{ color: '#cbd5e1' }} />
+            <div className="emp-social-empty-title">
+              No celebrations in {monthLabel}
+            </div>
+            <div className="emp-social-empty-sub">
+              No birthdays or work anniversaries found for {scopeLabel} in {monthLabel}.
+            </div>
+            {selectedMonth !== currentMonthIndex && (
+              <button
+                type="button"
+                className="emp-month-reset-btn"
+                onClick={() => setSelectedMonth(currentMonthIndex)}
+              >
+                Jump to Current Month ({MONTH_NAMES[currentMonthIndex]})
+              </button>
+            )}
+          </div>
+        ) : (
+          displayedEvents.map((evt) => {
+            const emp = evt.employee;
+            const empName = `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.name || emp.employeeName || emp.employeeId || 'Employee';
+            const empRole = emp.positionTitle || emp.position?.title || emp.position || emp.designation || 'Team Member';
+            const empDept = emp.departmentName || emp.department?.name || emp.department || '';
+            const avatarUrl =
+              emp.profilePicture ||
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(empName)}&background=${evt.type === 'BIRTHDAY' ? 'ec4899' : 'f59e0b'}&color=fff&bold=true`;
+
+            return (
+              <div key={evt.id} className="emp-social-item">
+                <div className="emp-social-item-main">
+                  <div className="emp-social-avatar-wrap">
+                    <img src={avatarUrl} alt="" aria-hidden="true" className="emp-social-avatar" />
+                  </div>
+                  <div className="emp-social-info">
+                    <div className="emp-social-name" title={empName}>{empName}</div>
+                    <div className="emp-social-sub" title={`${empRole}${empDept ? ` • ${empDept}` : ''}`}>
+                      {empRole}{empDept && ` • ${empDept}`}
+                    </div>
+                    <div className="emp-social-meta">
+                      {evt.type === 'BIRTHDAY' ? (
+                        <span className="emp-social-badge bday">
+                          <Gift size={11} /> Birthday • {evt.dateDisplay}
+                        </span>
+                      ) : (
+                        <>
+                          <span className="emp-social-badge anniv">
+                            <Trophy size={11} /> {evt.yearsDisplay} • {evt.dateDisplay}
+                          </span>
+                          <span className="emp-social-badge doj" title={`Date of Joining: ${evt.dojFormatted}`}>
+                            <CalendarDays size={11} /> DOJ: {evt.dojFormatted}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="emp-social-right">
+                  <span className={`emp-countdown-pill ${evt.tagClass || 'normal'}`}>
+                    {evt.tag}
+                  </span>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// Card 2: Workplace Presence (Who is Online & Out of Office)
+// ============================================================================
+
+const WorkplacePresenceCard = ({
+  user,
+  orgEmployees = [],
+  subordinates = [],
+  clockedInEmployees = [],
+  teamAttendance = [],
+  approvedLeaves = []
+}) => {
+  const isManager = isManagerUser(user);
+  const [scope, setScope] = React.useState(isManager ? 'TEAM' : 'DEPARTMENT');
+  const [activeFilter, setActiveFilter] = React.useState('ALL'); // 'ALL' | 'ONLINE' | 'OUT_OF_OFFICE'
+
+  const scopeOptions = React.useMemo(() => {
+    if (isManager) {
+      return [
+        { id: 'TEAM', label: 'My Team', icon: <Users size={12} /> },
+        { id: 'DEPARTMENT', label: 'Department', icon: <Building2 size={12} /> },
+        { id: 'ORG', label: 'All Org', icon: <Globe size={12} /> }
+      ];
+    }
+    return [
+      { id: 'DEPARTMENT', label: 'Department', icon: <Building2 size={12} /> },
+      { id: 'ORG', label: 'All Org', icon: <Globe size={12} /> }
+    ];
+  }, [isManager]);
+
+  const scopedEmployees = React.useMemo(() => {
+    return getScopedEmployees(scope, orgEmployees, subordinates, user);
+  }, [scope, orgEmployees, subordinates, user]);
+
+  const presenceData = React.useMemo(() => {
+    return calculateWorkplacePresence({
+      scopedEmployees,
+      clockedInEmployees,
+      teamAttendance,
+      approvedLeaves
+    });
+  }, [scopedEmployees, clockedInEmployees, teamAttendance, approvedLeaves]);
+
+  const displayedList = React.useMemo(() => {
+    if (activeFilter === 'ONLINE') {
+      return presenceData.list.filter((i) => i.presenceStatus === 'ONLINE');
+    }
+    if (activeFilter === 'OUT_OF_OFFICE') {
+      return presenceData.list.filter((i) => i.presenceStatus === 'OUT_OF_OFFICE');
+    }
+    return presenceData.list;
+  }, [activeFilter, presenceData]);
+
+  const scopeLabel = scopeOptions.find((o) => o.id === scope)?.label || 'Selected Group';
+
+  return (
+    <div className="emp-card emp-social-card">
+      <div className="emp-social-card-hd">
+        <div className="emp-social-card-title">
+          <Activity size={18} style={{ color: '#10b981' }} />
+          Workplace Presence
+        </div>
+        <div className="emp-scope-pills">
+          {scopeOptions.map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              className={`emp-scope-btn ${scope === opt.id ? 'active' : ''}`}
+              onClick={() => setScope(opt.id)}
+            >
+              {opt.icon}
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="emp-filter-row">
+        <div className="emp-filter-tabs">
+          <button
+            type="button"
+            className={`emp-filter-tab ${activeFilter === 'ALL' ? 'active' : ''}`}
+            onClick={() => setActiveFilter('ALL')}
+          >
+            All ({presenceData.total})
+          </button>
+          <button
+            type="button"
+            className={`emp-filter-tab ${activeFilter === 'ONLINE' ? 'active' : ''}`}
+            onClick={() => setActiveFilter('ONLINE')}
+          >
+            <span className="status-dot online"></span>
+            Online ({presenceData.onlineCount})
+          </button>
+          <button
+            type="button"
+            className={`emp-filter-tab ${activeFilter === 'OUT_OF_OFFICE' ? 'active' : ''}`}
+            onClick={() => setActiveFilter('OUT_OF_OFFICE')}
+          >
+            <span className="status-dot out"></span>
+            Out of Office ({presenceData.outCount})
+          </button>
+        </div>
+
+        <div className="presence-stat-badges">
+          <span className="presence-stat-pill online" title="Currently Clocked In">
+            <span className="status-dot online"></span> {presenceData.onlineCount} Active
+          </span>
+          <span className="presence-stat-pill out" title="Out of Office Today">
+            <span className="status-dot out"></span> {presenceData.outCount} Away
+          </span>
+        </div>
+      </div>
+
+      <div className="emp-social-list">
+        {displayedList.length === 0 ? (
+          <div className="emp-social-empty">
+            <Users size={32} style={{ color: '#cbd5e1' }} />
+            <div className="emp-social-empty-title">No employees found</div>
+            <div className="emp-social-empty-sub">
+              No members matching "{activeFilter.toLowerCase().replace(/_/g, ' ')}" in {scopeLabel}.
+            </div>
+          </div>
+        ) : (
+          displayedList.map((emp) => {
+            const empName = `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.name || emp.employeeName || emp.employeeId || 'Employee';
+            const empRole = emp.positionTitle || emp.position?.title || emp.position || emp.designation || 'Team Member';
+            const empDept = emp.departmentName || emp.department?.name || emp.department || '';
+            const statusKey = emp.presenceStatus.toLowerCase();
+            const avatarUrl =
+              emp.profilePicture ||
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(empName)}&background=${
+                statusKey === 'online' ? '10b981' : statusKey === 'out_of_office' ? 'f59e0b' : '64748b'
+              }&color=fff&bold=true`;
+
+            return (
+              <div key={emp.id || emp.employeeId} className="emp-social-item">
+                <div className="emp-social-item-main">
+                  <div className="emp-social-avatar-wrap">
+                    <img src={avatarUrl} alt={empName} className="emp-social-avatar" />
+                    <span className={`emp-social-presence-badge ${statusKey === 'out_of_office' ? 'out' : statusKey}`}></span>
+                  </div>
+                  <div className="emp-social-info">
+                    <div className="emp-social-name" title={empName}>{empName}</div>
+                    <div className="emp-social-sub" title={`${empRole}${empDept ? ` • ${empDept}` : ''}`}>
+                      {empRole}{empDept && ` • ${empDept}`}
+                    </div>
+                    <div className="emp-social-meta">
+                      {emp.presenceStatus === 'ONLINE' && (
+                        <>
+                          <span className="emp-social-badge online-badge">
+                            <CheckCircle2 size={11} /> {emp.presenceDetails}
+                          </span>
+                          <span className="emp-social-badge doj">
+                            <MapPin size={11} /> {emp.presenceLocation}
+                          </span>
+                        </>
+                      )}
+                      {emp.presenceStatus === 'OUT_OF_OFFICE' && (
+                        <span className="emp-social-badge out-badge">
+                          <Clock size={11} /> {emp.presenceDetails}
+                        </span>
+                      )}
+                      {emp.presenceStatus === 'OFFLINE' && (
+                        <span className="emp-social-badge offline-badge">
+                          <Clock size={11} /> Offline
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="emp-social-right">
+                  <span
+                    className={`emp-social-badge ${
+                      statusKey === 'online' ? 'online-badge' : statusKey === 'out_of_office' ? 'out-badge' : 'offline-badge'
+                    }`}
+                  >
+                    {emp.presenceLabel}
+                  </span>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );
